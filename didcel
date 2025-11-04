@@ -38,19 +38,25 @@ async function repl({commands}) {
   });
 
   repl.command('add')
-    .description('Add a verification method to the current DID document.')
+    .description('Add a verification method or service to the current DID document.')
+    .addArgument(new Argument('<property>', 'the name of the property to add to')
+      .choices(['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service']))
+    .addArgument(new Argument('<type>', 'the type of property to add')
+      .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(() => {
       console.error('add not implemented');
   });
 
   repl.command('expire')
     .description('Expire a verification method from the current DID document.')
+    .argument('<id>', 'the id of the verification method to expire')
     .action(() => {
       console.error('expire not implemented');
   });
 
   repl.command('remove')
-    .description('Expire a verification method from the current DID document.')
+    .description('Remove an object from the current DID document.')
+    .argument('<id>', 'the id of the object to remove')
     .action(() => {
       console.error('remove not implemented');
   });
