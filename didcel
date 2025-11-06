@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Argument, Command, CommanderError } from 'commander';
-import path from 'path';
-import promptSync from 'prompt-sync';
 import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
+import promptSync from 'prompt-sync';
+import {writeFileSync} from 'fs';
 
 // create the CLI and parse the options
 const program = new Command();
@@ -17,7 +17,7 @@ async function repl({commands}) {
   // configure the REPL
   const prompt = promptSync();
   const repl = new Command();
-  let log;
+  let cryptographicEventLog;
   let didDocument;
 
   repl.name('command')
@@ -41,8 +41,8 @@ async function repl({commands}) {
     .action(async () => {
       let result = await didcel.create({curve: 'P-256'});
       didDocument = result.didDocument;
-      log = cel.create({data: didDocument});
-      console.log('CEL: ', JSON.stringify(log, null, 2));
+      cryptographicEventLog = cel.create({data: didDocument});
+      console.log('CEL: ', JSON.stringify(cryptographicEventLog, null, 2));
     });
 
   repl.command('add')
@@ -89,8 +89,11 @@ async function repl({commands}) {
   repl.command('save')
     .description(
       'Saves the current DID to a cryptographic event log.')
-    .action(async () => {
-      console.error('save not implemented');
+    .argument('[filename]', 'the name of the file to save the event log to')
+    .action(async (filename) => {
+      const celFilename = filename || 'did.cel';
+      writeFileSync(celFilename, JSON.stringify(cryptographicEventLog, null, 2));
+      console.error(`Wrote to ${celFilename}`);
     });
 
   repl.command('quit')
