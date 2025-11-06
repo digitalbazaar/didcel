@@ -8,6 +8,7 @@ import {writeFileSync} from 'fs';
 // create the CLI and parse the options
 const program = new Command();
 program
+  .option('-c, --command <command...>', 'One or more commands to execute')
   .option('-v, --verbose', 'Provide verbose output')
   .parse(process.argv);
 const options = program.opts();
@@ -104,10 +105,9 @@ async function repl({commands}) {
 
   // if command-line commands were provided, run them and exit
   if(commands && commands.length > 0) {
-    commands.forEach(async (cmdLine) => {
-      let args = cmdLine.split(' ');
-      let command = args[0];
-
+    for(const cmdLine of commands) {
+      const args = cmdLine.split(' ');
+      const command = args[0];
       try {
         const commanderArgs = [command, command].concat(args);
         await repl.parseAsync(commanderArgs);
@@ -116,7 +116,7 @@ async function repl({commands}) {
           throw err;
         }
       }
-    });
+    };
 
     process.exit(0);
   }
