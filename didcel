@@ -38,8 +38,9 @@ async function repl({commands}) {
 
   repl.command('create')
     .description('Create a new DID document')
-    .action(() => {
-      didDocument = didcel.create({});
+    .action(async () => {
+      let result = await didcel.create({curve: 'P-256'});
+      didDocument = result.didDocument;
       log = cel.create({data: didDocument});
       console.log('CEL: ', JSON.stringify(log, null, 2));
     });

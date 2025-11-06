@@ -17,8 +17,14 @@
   "license": "BSD",
   "description": "",
   "dependencies": {
+    "@digitalbazaar/data-integrity": "^2.5.0",
+    "@digitalbazaar/ecdsa-jcs-2019-cryptosuite": "^1.0.0",
+    "@noble/hashes": "^2.0.1",
+    "canonicalize": "^2.1.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
+    "jsonld-document-loader": "^2.3.0",
+    "multiformats": "^13.4.1",
     "prompt-sync": "^4.2.0"
   }
 }
