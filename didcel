@@ -4,7 +4,7 @@ import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
 import promptSync from 'prompt-sync';
 import {writeFileSync} from 'fs';
-import {createJsonldPrettyPrinter} from './lib/utils.js';
+import {createJsonldPrettyPrinter, getObjectByIdSuffix} from './lib/utils.js';
 
 // create the CLI and parse the options
 const program = new Command();
@@ -82,37 +82,38 @@ async function repl({commands}) {
 
   repl.command('ls')
     .description('list the contents of all identifiers, or a specific one.')
-    .addArgument(new Argument('[id]', 'the identifier to list'))
-    .action(async (id) => {
+    .addArgument(new Argument('[suffix]', 'the last several characters of the identifier'))
+    .action(async (suffix) => {
       console.log(didDocument.id);
-      for(let property of COMMON_PROPERTIES) {
-        if(didDocument[property]) {
-          let propertyListing = '';
-          for(let entry of didDocument[property]) {
-            const lastFourOfId =
-              entry.id.slice(entry.id.length - 4, entry.id.length);
-            // if an id was supplied, print out the entry and continue
-            if(id === lastFourOfId) {
-              propertyListing =
-                `  ${property}: ` + JSON.stringify(entry, jsonldPretty, 4);
-              console.log(propertyListing);
-              return;
-            }
 
-            // if an id was not supplied, summarize the identifier
-            if(id === undefined) {
-              if(propertyListing.length < 1) {
-                propertyListing = `  ${property}: `;
-              }
-              if(entry.type === 'Multikey') {
-                propertyListing +=
-                  entry.id.slice(0, 4) + '...' + lastFourOfId + ' ';
-              }
-            }
+      // print detailed object if suffix was provided
+      if(suffix) {
+        const value = getObjectByIdSuffix({didDocument, suffix});
+        if(value) {
+          console.log(JSON.stringify(value, jsonldPretty, 2));
+          return;
+        }
+      }
+
+      // summarize DID Document if suffix was not provided
+      for(let property of Object.keys(didDocument)) {
+        let numEntries = 0;
+        if(!Array.isArray(didDocument[property])) {
+          continue;
+        }
+        let propertyListing = `  ${property}: `;
+        for(let entry of didDocument[property]) {
+          if(typeof entry !== 'object') {
+            continue;
           }
-          if(propertyListing.length > 0) {
-            console.log(propertyListing);
-          }
+          const lastFourOfId =
+            entry.id.slice(entry.id.length - 4, entry.id.length);
+            propertyListing += entry.type +
+              entry.id.slice(0, 4) + '...' + lastFourOfId + ' ';
+          numEntries++;
+        }
+        if(numEntries > 0) {
+          console.log(propertyListing);
         }
       }
     });
