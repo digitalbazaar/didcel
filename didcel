@@ -1,4 +1,29 @@
 #!/usr/bin/env node
+/**
+ * @fileoverview DID CEL Command Line Interface (CLI)
+ *
+ * This is an interactive REPL (Read-Eval-Print Loop) for creating and managing
+ * DID documents using the Certificate Event Log (CEL) method. The tool allows
+ * users to create DIDs, add/remove verification methods, update DID documents,
+ * and maintain a cryptographic event log of all changes.
+ *
+ * Usage:
+ *   ./didcel                          # Start interactive REPL
+ *   ./didcel -c "create" "add ..."    # Execute commands and continue in REPL
+ *   ./didcel -v                       # Verbose output mode
+ *
+ * Available commands:
+ *   create   - Create a new DID document
+ *   add      - Add verification methods or services
+ *   ls       - List DID contents
+ *   expire   - Set expiration on verification methods
+ *   remove   - Remove objects from DID document
+ *   update   - Update the cryptographic event log
+ *   witness  - Generate witness proofs
+ *   save     - Save CEL to file
+ *   quit     - Exit the REPL
+ */
+
 import { Argument, Command, CommanderError } from 'commander';
 import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
@@ -7,7 +32,7 @@ import {writeFileSync} from 'fs';
 import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
   getObjectByIdSuffix} from './lib/utils.js';
 
-// create the CLI and parse the options
+// create the CLI and parse command-line options
 const program = new Command();
 program
   .option('-c, --command <command...>', 'One or more commands to execute')
@@ -15,22 +40,36 @@ program
   .parse(process.argv);
 const options = program.opts();
 
-// create the JSON-LD pretty printer
+// create the JSON-LD pretty printer for formatted output
+// orders keys with @context, id, type first, then alphabetically
 const jsonldPretty = createJsonldPrettyPrinter({
   preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite',
     'previousEvent']
 });
 
-// common properties for a DID Document
+// common verification relationship and service properties in DID documents
 const COMMON_PROPERTIES = ['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service'];
 
-// Runs the repl until exit
+/**
+ * Runs the interactive REPL for DID CEL management. Maintains session state
+ * including the current DID document, CEL, and secret keys.
+ *
+ * @param {Object} options - Configuration options.
+ * @param {Array<string>} [options.commands] - Optional array of commands to
+ *   execute before entering interactive mode.
+ * @returns {Promise<void>}
+ */
 async function repl({commands}) {
-  // configure the REPL
+  // configure the REPL environment
   const prompt = promptSync();
   const repl = new Command();
+
+  // session state variables
+  // the CEL tracking all DID changes
   let cryptographicEventLog;
+  // the current DID document
   let didDocument;
+  // secret keys organized by verification relationship
   let secretKeys = {
     authentication: [],
     assertionMethod: [],
@@ -39,8 +78,10 @@ async function repl({commands}) {
     keyAgreement: []
   };
 
+  // configure the Commander.js REPL with custom error handling
   repl.name('command')
     .usage('[options]')
+    // don't exit process on command errors
     .exitOverride();
 
   repl.command('help')
@@ -55,16 +96,23 @@ async function repl({commands}) {
       console.error('load not implemented');
     });
 
+  // command: create
+  // creates a new DID document with an initial assertionMethod key
   repl.command('create')
     .description('Create a new DID document')
     .action(async () => {
+      // generate a new DID document with P-256 elliptic curve key
       let result = await didcel.create({curve: 'P-256'});
       didDocument = result.didDocument;
+      // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
+      // initialize the Certificate Event Log with the create event
       cryptographicEventLog = cel.create({data: didDocument});
       console.log(`create successful: ${didDocument.id}`);
     });
 
+  // command: add
+  // adds verification methods or services to the DID document
   repl.command('add')
     .description('Add a verification method or service to the current DID document.')
     .addArgument(new Argument('<property>', 'the name of the property to add to')
@@ -72,22 +120,28 @@ async function repl({commands}) {
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(async (property, type) => {
+      // TODO: Currently only ECDSA verification methods are supported
       if(property !== 'service' && type === 'ecdsa') {
+        // generate a new verification method for the specified relationship
         let result = await didcel.addVm(
           {didDocument, verificationRelationship: property, curve: 'P-256'});
         didDocument = result.didDocument;
+        // store the secret key for this verification relationship
         secretKeys[property].push(result.keyPair);
         console.log(`add: new verification method for ${property}`);
       }
     });
 
+  // command: ls
+  // lists DID contents - either a summary or details of a specific object
   repl.command('ls')
     .description('list the contents of all identifiers, or a specific one.')
     .addArgument(new Argument('[suffix]', 'the last several characters of the identifier'))
     .action(async (suffix) => {
+      // always display the DID identifier
       console.log(didDocument.id);
 
-      // print detailed object if suffix was provided
+      // if suffix provided, print detailed object information
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
@@ -96,17 +150,20 @@ async function repl({commands}) {
         }
       }
 
-      // summarize DID Document if suffix was not provided
+      // if no suffix provided, display a summary of the DID document
       for(let property of Object.keys(didDocument)) {
         let numEntries = 0;
+        // only process array properties (verification relationships, services)
         if(!Array.isArray(didDocument[property])) {
           continue;
         }
         let propertyListing = `  ${property}: `;
+        // show abbreviated identifiers for each entry
         for(let entry of didDocument[property]) {
           if(typeof entry !== 'object') {
             continue;
           }
+          // display first 4 and last 4 characters of identifier
           const lastFourOfId =
             entry.id.slice(entry.id.length - 4, entry.id.length);
             propertyListing += entry.type +
@@ -119,6 +176,8 @@ async function repl({commands}) {
       }
     });
 
+  // command: expire
+  // sets an expiration timestamp on a verification method
   repl.command('expire')
     .description('Expire a verification method from the current DID document.')
     .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to expire'))
@@ -126,9 +185,12 @@ async function repl({commands}) {
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
+          // generate ISO 8601 timestamp for expiration
           let expireDatetime = new Date().toISOString();
+          // format as YYYY-MM-DDTHH:MM:SSZ (remove milliseconds)
           expireDatetime =
             expireDatetime.slice(0, expireDatetime.length - 5) + 'Z';
+          // add expires property to the verification method
           value.expires = expireDatetime;
           console.log(`expire: ${value.id} at ${expireDatetime}.`);
         } else {
@@ -137,11 +199,18 @@ async function repl({commands}) {
       }
     });
 
+  // command: remove
+  // removes a verification method or service from the DID document.
+  // the object is identified by the last few characters of its ID (suffix).
+  // this is useful for removing keys without typing the full identifier. note:
+  // The DID document is modified but not automatically committed to the CEL.
+  // you must run 'update' and 'witness' commands to persist the change.
   repl.command('remove')
     .description('Remove an object from the current DID document.')
     .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to remove'))
     .action(async (suffix) => {
       if(suffix) {
+        // search for and delete the object matching the ID suffix
         const value = deleteObjectByIdSuffix({didDocument, suffix});
         if(value) {
           console.log(`remove: removed ${value.id} successfully.`);
@@ -151,48 +220,89 @@ async function repl({commands}) {
       }
     });
 
+  // command: update
+  // updates the cryptographic proof on the DID document and appends an update
+  // event to the Certificate Event Log. This creates a new entry in the log
+  // that is hash-linked to the previous event, forming a verifiable chain. The
+  // proof is signed using the first assertionMethod key generated during
+  // create. After running update, you should run 'witness' to get witness
+  // attestations.
   repl.command('update')
     .description('Update the cryptographic event log with the latest DID document')
     .action(async () => {
+      // step 1: Regenerate the cryptographic proof on the DID document
+      // this signs the current state of the DID document
       didDocument = (await didcel.updateProof({didDocument,
         assertionMethod: secretKeys.assertionMethod[0]})).didDocument;
+
+      // step 2: Append an update event to the CEL
+      // this creates a hash-linked chain entry with the modified DID document
       cryptographicEventLog =
         await cel.update({cel: cryptographicEventLog, data: didDocument});
     });
 
+  // command: witness
+  // generates cryptographic proofs from external witnesses that attest to the
+  // validity of the most recent event in the CEL. By default, three witnesses
+  // (red, green, and blue) each independently sign the event, providing
+  // decentralized attestation. This is a key feature of the CEL architecture
+  // that prevents single points of failure and enables auditability.
   repl.command('witness')
     .description(
       'Witness the latest set of updates to the DID document.')
     .action(async () => {
+      // generate witness proofs for the most recent event in the log
+      // each witness independently validates and signs the event
       const proof = await cel.witness({cel: cryptographicEventLog})
       console.log('witness: proofs complete');
     });
 
+  // command: save
+  // persists the Certificate Event Log to a file. The CEL contains the complete
+  // history of all operations on the DID document, including create and update
+  // events, along with witness attestations. The file is saved in JSON format
+  // with keys ordered for readability (e.g., @context, id, type first).
+  // this file can later be loaded to reconstruct the DID's history and state.
   repl.command('save')
     .description(
       'Saves the current DID to a cryptographic event log.')
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async (filename) => {
+      // use default filename 'did.cel' if none provided
       const celFilename = filename || 'did.cel';
+      // write the CEL to file with pretty-printed JSON formatting
       writeFileSync(celFilename, JSON.stringify(cryptographicEventLog, jsonldPretty, 2));
       console.error(`Wrote to ${celFilename}`);
     });
 
+  // command: quit
+  // exits the REPL without saving. Any unsaved changes to the DID document
+  // or CEL will be lost. Make sure to run 'save' before quitting if you want
+  // to persist your work.
   repl.command('quit')
     .description('Exit without saving the cryptographic event log.')
     .action(async () => {
       process.exit(0);
     });
 
-  // if command-line commands were provided, run them and exit
+  // batch command execution mode
+  // if commands were provided via the -c flag, execute them sequentially
+  // before entering interactive mode. This allows for scripting common
+  // operations, e.g., ./didcel -c "create" "add assertionMethod ecdsa" "update"
+  // each command is parsed and executed, with errors suppressed to allow
+  // remaining commands to run.
   if(commands && commands.length > 0) {
     for(const cmdLine of commands) {
       const args = cmdLine.split(' ');
       const command = args[0];
       try {
+        // parse command arguments and execute
+        // the command is duplicated in the array for Commander.js parsing
         const commanderArgs = [command, command].concat(args);
         await repl.parseAsync(commanderArgs);
       } catch(err) {
+        // suppress Commander errors (e.g., unknown command, validation
+        // failures) to continue executing remaining commands in the batch
         if(!(err instanceof CommanderError)) {
           throw err;
         }
@@ -200,17 +310,23 @@ async function repl({commands}) {
     };
   }
 
-  // if no command line commands were given, run the repl
+  // interactive REPL loop
+  // continuously prompts the user for commands until 'quit' is entered.
+  // commands are parsed by Commander.js which handles validation,
+  // argument parsing, and routing to the appropriate action handler.
   let command = '';
   do {
+    // display prompt and read user input
     const args = prompt('did:cel> ').split(' ');
     command = args[0];
 
     try {
+      // parse and execute the user's command
       const commanderArgs = [command, command].concat(args);
       await repl.parseAsync(commanderArgs);
     } catch(err) {
-      // don't automatically exit from the Commander CLI
+      // don't exit the REPL on command errors
+      // this allows users to correct mistakes without restarting
       if(!(err instanceof CommanderError)) {
         throw err;
       }
@@ -218,7 +334,8 @@ async function repl({commands}) {
   } while(command != 'quit');
 }
 
-// Run the repl
+// entry point: Start the REPL with any command-line options
+// the function is called with commands from the -c flag if provided
 await repl({
   commands: options.command
 });
