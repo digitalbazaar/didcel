@@ -107,7 +107,7 @@ async function repl({commands}) {
       // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
       // initialize the Certificate Event Log with the create event
-      cryptographicEventLog = cel.create({data: didDocument});
+      cryptographicEventLog = cel.create({event: result.event});
       console.log(`create successful: ${didDocument.id}`);
     });
 
@@ -232,13 +232,15 @@ async function repl({commands}) {
     .action(async () => {
       // step 1: Regenerate the cryptographic proof on the DID document
       // this signs the current state of the DID document
-      didDocument = (await didcel.updateProof({didDocument,
-        assertionMethod: secretKeys.assertionMethod[0]})).didDocument;
+      const result = (await didcel.updateProof({didDocument,
+        assertionMethod: secretKeys.assertionMethod[0]}));
+      const event = result.event;
+      didDocument = result.didDocument;
 
       // step 2: Append an update event to the CEL
       // this creates a hash-linked chain entry with the modified DID document
       cryptographicEventLog =
-        await cel.update({cel: cryptographicEventLog, data: didDocument});
+        await cel.update({cel: cryptographicEventLog, event});
     });
 
   // command: witness
