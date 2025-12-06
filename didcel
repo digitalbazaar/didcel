@@ -44,7 +44,7 @@ const options = program.opts();
 // orders keys with @context, id, type first, then alphabetically
 const jsonldPretty = createJsonldPrettyPrinter({
   preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite',
-    'previousEvent']
+    'heartbeatFrequency', 'previousEventHash']
 });
 
 // common verification relationship and service properties in DID documents
@@ -232,15 +232,14 @@ async function repl({commands}) {
     .action(async () => {
       // step 1: Regenerate the cryptographic proof on the DID document
       // this signs the current state of the DID document
-      const result = (await didcel.updateProof({didDocument,
-        assertionMethod: secretKeys.assertionMethod[0]}));
+      const result = await didcel.createEvent({data: didDocument,
+        assertionMethod: secretKeys.assertionMethod[0]});
       const event = result.event;
-      didDocument = result.didDocument;
 
       // step 2: Append an update event to the CEL
       // this creates a hash-linked chain entry with the modified DID document
       cryptographicEventLog =
-        await cel.update({cel: cryptographicEventLog, event});
+        await cel.addEvent({cel: cryptographicEventLog, event});
     });
 
   // command: witness
@@ -255,7 +254,7 @@ async function repl({commands}) {
     .action(async () => {
       // generate witness proofs for the most recent event in the log
       // each witness independently validates and signs the event
-      const proof = await cel.witness({cel: cryptographicEventLog})
+      const proofs = await cel.witness({cel: cryptographicEventLog});
       console.log('witness: proofs complete');
     });
 
