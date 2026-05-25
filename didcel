@@ -26,9 +26,11 @@
 
 import { Argument, Command, CommanderError } from 'commander';
 import cel from './lib/cel.js';
+import {config} from './lib/config.js';
 import didcel from './lib/didcel.js';
 import promptSync from 'prompt-sync';
-import {writeFileSync} from 'fs';
+import {mkdirSync, writeFileSync} from 'fs';
+import {join} from 'node:path';
 import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
   getObjectByIdSuffix} from './lib/utils.js';
 
@@ -306,11 +308,23 @@ async function repl({commands}) {
       'Saves the current DID to a cryptographic event log.')
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async (filename) => {
-      // use default filename 'did.cel' if none provided
-      const celFilename = filename || 'did.cel';
-      // write the CEL to file with pretty-printed JSON formatting
-      writeFileSync(celFilename, JSON.stringify(cryptographicEventLog, jsonldPretty, 2));
-      console.error(`Wrote to ${celFilename}`);
+      const celJson = JSON.stringify(cryptographicEventLog, jsonldPretty, 2);
+
+      // always write to configured logs directory using DID identifier as filename
+      if(config.logs) {
+        mkdirSync(config.logs, {recursive: true});
+        // use the method-specific identifier (part after did:cel:) as filename
+        const didIdentifier = didDocument.id.split(':').pop();
+        const logsPath = join(config.logs, `${didIdentifier}.cel`);
+        writeFileSync(logsPath, celJson);
+        console.error(`Wrote to ${logsPath}`);
+      }
+
+      // also write to explicit filename if provided
+      if(filename) {
+        writeFileSync(filename, celJson);
+        console.error(`Wrote to ${filename}`);
+      }
     });
 
   // command: quit
