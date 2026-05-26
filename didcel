@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @fileoverview DID CEL Command Line Interface (CLI)
+ * @file DID CEL Command Line Interface (CLI).
  *
  * This is an interactive REPL (Read-Eval-Print Loop) for creating and managing
  * DID documents using the Cryptographic Event Log (CEL) method. The tool allows
@@ -10,7 +10,7 @@
  * Usage:
  *   ./didcel                          # Start interactive REPL
  *   ./didcel -c "create" "add ..."    # Execute commands and continue in REPL
- *   ./didcel -v                       # Verbose output mode
+ *   ./didcel -v                       # Verbose output mode.
  *
  * Available commands:
  *   create   - Create a new DID document
@@ -21,19 +21,19 @@
  *   update   - Update the cryptographic event log
  *   witness  - Generate witness proofs
  *   save     - Save CEL to file
- *   quit     - Exit the REPL
+ *   quit     - Exit the REPL.
  */
 
-import { Argument, Command, CommanderError } from 'commander';
+import {Argument, Command, CommanderError} from 'commander';
+import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
+  getObjectByIdSuffix} from './lib/utils.js';
+import {mkdirSync, writeFileSync} from 'fs';
 import cel from './lib/cel.js';
 import {config} from './lib/config.js';
 import didcel from './lib/didcel.js';
-import promptSync from 'prompt-sync';
-import {mkdirSync, writeFileSync} from 'fs';
 import {join} from 'node:path';
+import promptSync from 'prompt-sync';
 import {saveSecrets} from './lib/secrets.js';
-import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
-  getObjectByIdSuffix} from './lib/utils.js';
 
 // create the CLI and parse command-line options
 const program = new Command();
@@ -47,20 +47,24 @@ const options = program.opts();
 // create the JSON-LD pretty printer for formatted output
 // orders keys with @context, id, type first, then alphabetically
 const jsonldPretty = createJsonldPrettyPrinter({
-  preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite',
+  preferOrder: ['@context', '@id', '@type', 'id', 'type', 'cryptosuite',
     'heartbeatFrequency', 'previousEventHash']
 });
 
 // common verification relationship and service properties in DID documents
-const COMMON_PROPERTIES = ['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service'];
+const COMMON_PROPERTIES = [
+  'authentication', 'assertionMethod', 'capabilityDelegation',
+  'capabilityInvocation', 'keyAgreement', 'service'
+];
 
 /**
  * Runs the interactive REPL for DID CEL management. Maintains session state
  * including the current DID document, CEL, and secret keys.
  *
- * @param {Object} options - Configuration options.
+ * @param {object} options - Configuration options.
  * @param {Array<string>} [options.commands] - Optional array of commands to
  *   execute before entering interactive mode.
+ * @param {string} [options.password] - Password for encrypting private keys.
  * @returns {Promise<void>}
  */
 async function repl({commands, password}) {
@@ -79,7 +83,7 @@ async function repl({commands, password}) {
   // the current DID document
   let didDocument;
   // secret keys organized by verification relationship
-  let secretKeys = {
+  const secretKeys = {
     authentication: [],
     assertionMethod: [],
     capabilityInvocation: [],
@@ -111,7 +115,7 @@ async function repl({commands, password}) {
     .description('Create a new DID document')
     .action(async () => {
       // generate a new DID document with P-256 elliptic curve key
-      let result = await didcel.create({curve: 'P-256'});
+      const result = await didcel.create({curve: 'P-256'});
       didDocument = result.didDocument;
       // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
@@ -123,16 +127,16 @@ async function repl({commands, password}) {
   // command: add
   // adds verification methods or services to the DID document
   repl.command('add')
-    .description('Add a verification method or service to the current DID document.')
-    .addArgument(new Argument('<property>', 'the name of the property to add to')
-      .choices(COMMON_PROPERTIES))
+    .description('Add a verification method or service to the DID document.')
+    .addArgument(new Argument('<property>',
+      'the name of the property to add to').choices(COMMON_PROPERTIES))
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(async (property, type) => {
       // TODO: Currently only ECDSA verification methods are supported
       if(property !== 'service' && type === 'ecdsa') {
         // generate a new verification method for the specified relationship
-        let result = await didcel.addVm(
+        const result = await didcel.addVm(
           {didDocument, verificationRelationship: property, curve: 'P-256'});
         didDocument = result.didDocument;
         // store the secret key for this verification relationship
@@ -145,8 +149,9 @@ async function repl({commands, password}) {
   // lists DID contents - either a summary or details of a specific object
   repl.command('ls')
     .description('list the contents of all identifiers, or a specific one.')
-    .addArgument(new Argument('[suffix]', 'the last several characters of the identifier'))
-    .action(async (suffix) => {
+    .addArgument(
+      new Argument('[suffix]', 'the last several characters of the identifier'))
+    .action(async suffix => {
       // always display the DID identifier
       console.log(didDocument.id);
 
@@ -160,7 +165,7 @@ async function repl({commands, password}) {
       }
 
       // if no suffix provided, display a summary of the DID document
-      for(let property of Object.keys(didDocument)) {
+      for(const property of Object.keys(didDocument)) {
         let numEntries = 0;
         // only process array properties (verification relationships, services)
         if(!Array.isArray(didDocument[property])) {
@@ -168,14 +173,14 @@ async function repl({commands, password}) {
         }
         let propertyListing = `  ${property}: `;
         // show abbreviated identifiers for each entry
-        for(let entry of didDocument[property]) {
+        for(const entry of didDocument[property]) {
           if(typeof entry !== 'object') {
             continue;
           }
           // display first 4 and last 4 characters of identifier
           const lastFourOfId =
             entry.id.slice(entry.id.length - 4, entry.id.length);
-            propertyListing += entry.type +
+          propertyListing += entry.type +
               entry.id.slice(0, 4) + '...' + lastFourOfId + ' ';
           numEntries++;
         }
@@ -189,8 +194,9 @@ async function repl({commands, password}) {
   // sets an expiration timestamp on a verification method
   repl.command('expire')
     .description('Expire a verification method from the current DID document.')
-    .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to expire'))
-    .action(async (suffix) => {
+    .addArgument(new Argument('<suffix>',
+      'the last several characters of the identifier to expire'))
+    .action(async suffix => {
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
@@ -216,8 +222,9 @@ async function repl({commands, password}) {
   // you must run 'update' and 'witness' commands to persist the change.
   repl.command('remove')
     .description('Remove an object from the current DID document.')
-    .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to remove'))
-    .action(async (suffix) => {
+    .addArgument(new Argument('<suffix>',
+      'the last several characters of the identifier to remove'))
+    .action(async suffix => {
       if(suffix) {
         // search for and delete the object matching the ID suffix
         const value = deleteObjectByIdSuffix({didDocument, suffix});
@@ -237,7 +244,7 @@ async function repl({commands, password}) {
   // create. After running update, you should run 'witness' to get witness
   // attestations.
   repl.command('update')
-    .description('Update the cryptographic event log with the latest DID document')
+    .description('Update the cryptographic event log with the latest DID doc')
     .action(async () => {
       // step 1: Regenerate the cryptographic proof on the DID document
       // this signs the current state of the DID document
@@ -300,25 +307,25 @@ async function repl({commands, password}) {
     .action(async () => {
       // generate witness proofs for the most recent event in the log
       // each witness independently validates and signs the event
-      const proofs = await cel.witness({cel: cryptographicEventLog});
+      await cel.witness({cel: cryptographicEventLog});
       console.log('witness: proofs complete');
     });
 
   // command: save
-  // persists the Cryptographic Event Log to a file. The CEL contains the complete
-  // history of all operations on the DID document, including create and update
-  // events, along with witness attestations. The file is saved in JSON format
-  // with keys ordered for readability (e.g., @context, id, type first).
-  // this file can later be loaded to reconstruct the DID's history and state.
+  // persists the Cryptographic Event Log to a file. The CEL contains the
+  // complete history of all operations on the DID document, including create
+  // and update events, along with witness attestations. The file is saved in
+  // JSON format with keys ordered for readability (e.g., @context, id, type
+  // first). This file can later be loaded to reconstruct the DID's history.
   repl.command('save')
     .description(
       'Saves the current DID to a cryptographic event log.')
     .argument('[filename]', 'the name of the file to save the event log to')
-    .action(async (filename) => {
+    .action(async filename => {
       const didIdentifier = didDocument.id.split(':').pop();
       const celJson = JSON.stringify(cryptographicEventLog, jsonldPretty, 2);
 
-      // always write to configured logs directory using DID identifier as filename
+      // always write to configured logs directory using DID identifier
       if(config.logs) {
         mkdirSync(config.logs, {recursive: true});
         const logsPath = join(config.logs, `${didIdentifier}.cel`);
@@ -328,7 +335,8 @@ async function repl({commands, password}) {
 
       // save encrypted private keys to secrets directory
       await saveSecrets({didIdentifier, secretKeys, password});
-      console.error(`Wrote secrets to ${join(config.secrets, `${didIdentifier}.yaml`)}`);
+      const secretsPath = join(config.secrets, `${didIdentifier}.yaml`);
+      console.error(`Wrote secrets to ${secretsPath}`);
 
       // also write CEL to explicit filename if provided
       if(filename) {
@@ -369,7 +377,7 @@ async function repl({commands, password}) {
           throw err;
         }
       }
-    };
+    }
   }
 
   // interactive REPL loop
