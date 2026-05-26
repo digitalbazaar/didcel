@@ -25,11 +25,11 @@
  */
 
 import {Argument, Command, CommanderError} from 'commander';
+import {config, loadConfig} from './lib/config.js';
 import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
   getObjectByIdSuffix} from './lib/utils.js';
 import {mkdirSync, writeFileSync} from 'fs';
 import cel from './lib/cel.js';
-import {config} from './lib/config.js';
 import didcel from './lib/didcel.js';
 import {join} from 'node:path';
 import promptSync from 'prompt-sync';
@@ -39,10 +39,13 @@ import {saveSecrets} from './lib/secrets.js';
 const program = new Command();
 program
   .option('-c, --command <command...>', 'One or more commands to execute')
+  .option('-g, --config <path>', 'Path to config.yaml')
   .option('-p, --password <password>', 'Password for encrypting private keys')
   .option('-v, --verbose', 'Provide verbose output')
   .parse(process.argv);
 const options = program.opts();
+
+loadConfig({configPath: options.config});
 
 // create the JSON-LD pretty printer for formatted output
 // orders keys with @context, id, type first, then alphabetically
