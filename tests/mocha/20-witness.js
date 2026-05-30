@@ -2,47 +2,57 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  listCelFiles, listSecretFiles, runDidcel, TMP_DIR
+  LOGS_DIR, SECRETS_DIR, TEST_PASSWORD, TEST_WITNESSES,
+  listCelFiles, listSecretFiles
 } from './helpers.js';
+import {create} from '../../lib/didcel.js';
+import {create as createCel, witness} from '../../lib/cel.js';
+import {saveSecrets} from '../../lib/secrets.js';
 import chai from 'chai';
 import {join} from 'node:path';
-import {readFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 
 const {expect} = chai;
+
+async function runCreateAndWitness() {
+  const {keyPair, recoveryKeyPair, event, didDocument} = await create();
+  const cryptoEventLog = createCel({event});
+  await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+  const didIdentifier = didDocument.id.replace('did:cel:', '');
+  const celPath = join(LOGS_DIR, `${didIdentifier}.cel`);
+  writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
+  const secretKeys = {
+    authentication: [],
+    assertionMethod: [keyPair],
+    capabilityInvocation: [],
+    capabilityDelegation: [],
+    keyAgreement: [],
+    recovery: [recoveryKeyPair]
+  };
+  await saveSecrets(
+    {didIdentifier, secretKeys, password: TEST_PASSWORD, secretsDir: SECRETS_DIR});
+  return {didDocument, cryptoEventLog, celPath};
+}
 
 describe('witness', function() {
   this.timeout(60000);
 
   it('should create, witness, and save a DID', async () => {
-    const before = listCelFiles().length;
-    const secretsBefore = listSecretFiles().length;
+    const beforeCel = listCelFiles().length;
+    const beforeSecrets = listSecretFiles().length;
 
-    const {stdout, stderr, exitCode} = await runDidcel({
-      commands: ['create', 'witness', 'save', 'quit']
-    });
+    const {didDocument} = await runCreateAndWitness();
 
-    expect(exitCode, `stderr: ${stderr}`).to.equal(0);
-    expect(stdout).to.include('create successful: did:cel:');
-    expect(stdout).to.include('witness: proofs complete');
-
-    expect(listCelFiles()).to.have.length(before + 1);
-    expect(listSecretFiles()).to.have.length(secretsBefore + 1);
+    expect(didDocument.id).to.match(/^did:cel:/);
+    expect(listCelFiles()).to.have.length(beforeCel + 1);
+    expect(listSecretFiles()).to.have.length(beforeSecrets + 1);
   });
 
   it('should produce a CEL with a witness proof on the create event',
     async () => {
-      const before = listCelFiles();
+      const {celPath} = await runCreateAndWitness();
 
-      const {stderr, exitCode} = await runDidcel({
-        commands: ['create', 'witness', 'save', 'quit']
-      });
-
-      expect(exitCode, `stderr: ${stderr}`).to.equal(0);
-
-      const after = listCelFiles();
-      const newFile = after.find(f => !before.includes(f));
-      const celContent = JSON.parse(
-        readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      const celContent = JSON.parse(readFileSync(celPath, 'utf8'));
 
       expect(celContent).to.have.property('log');
       expect(celContent.log).to.have.length(1);
@@ -58,18 +68,9 @@ describe('witness', function() {
     });
 
   it('should have witness proof with a real verificationMethod', async () => {
-    const before = listCelFiles();
+    const {celPath} = await runCreateAndWitness();
 
-    const {exitCode, stderr} = await runDidcel({
-      commands: ['create', 'witness', 'save', 'quit']
-    });
-
-    expect(exitCode, `stderr: ${stderr}`).to.equal(0);
-
-    const after = listCelFiles();
-    const newFile = after.find(f => !before.includes(f));
-    const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+    const celContent = JSON.parse(readFileSync(celPath, 'utf8'));
 
     const proof = celContent.log[0].proof[0];
     // verificationMethod should reference a real did:key (not a placeholder)

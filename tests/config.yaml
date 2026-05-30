@@ -1,4 +1,0 @@
-witnesses:
-  - https://localhost:22443/witnesses/test/witness
-logs: ./tests/tmp/logs
-secrets: ./tests/tmp/secrets
