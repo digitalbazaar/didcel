@@ -1,8 +1,10 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
+import {
+  addEvent, addVm, create, createCel, createEvent, witness
+} from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
-import {addEvent, addVm, create, createCel, createEvent, witness} from '../../lib/index.js';
 import chai from 'chai';
 
 const {expect} = chai;
@@ -54,6 +56,7 @@ describe('update', function() {
       const {cryptoEventLog} = await runUpdate();
 
       const updateEntry = cryptoEventLog.log[1];
+      expect(updateEntry.event.operation.type).to.equal('update');
       const didDoc = updateEntry.event.operation.data;
       expect(didDoc).to.have.property('authentication');
       expect(didDoc.authentication).to.be.an('array');

@@ -1,8 +1,10 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
+import {
+  addEvent, create, createCel, createEvent, witness
+} from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
-import {addEvent, create, createCel, createEvent, witness} from '../../lib/index.js';
 import chai from 'chai';
 
 const {expect} = chai;

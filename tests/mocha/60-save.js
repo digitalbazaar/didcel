@@ -1,12 +1,12 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {TEST_PASSWORD, TEST_WITNESSES} from './helpers.js';
 import {
   addEvent, create, createCel, createEvent, load, loadSecrets, saveSecrets,
   witness
 } from '../../lib/index.js';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {TEST_PASSWORD, TEST_WITNESSES} from './helpers.js';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import chai from 'chai';
@@ -24,6 +24,7 @@ describe('save', function() {
     tmpDir = mkdtempSync(join(tmpdir(), 'didcel-test-'));
     logsDir = join(tmpDir, 'logs');
     secretsDir = join(tmpDir, 'secrets');
+    mkdirSync(logsDir, {recursive: true});
   });
 
   after(() => {

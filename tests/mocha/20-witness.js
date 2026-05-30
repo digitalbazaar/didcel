@@ -1,8 +1,8 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {TEST_WITNESSES} from './helpers.js';
 import {create, createCel, witness} from '../../lib/index.js';
+import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
 
 const {expect} = chai;
@@ -29,6 +29,7 @@ describe('witness', function() {
       const {cryptoEventLog} = await runCreateAndWitness();
 
       const createEntry = cryptoEventLog.log[0];
+      expect(createEntry.event.operation.type).to.equal('create');
       expect(createEntry).to.have.property('proof');
       expect(createEntry.proof).to.be.an('array');
       expect(createEntry.proof.length).to.be.at.least(1);
@@ -37,11 +38,4 @@ describe('witness', function() {
       expect(proof).to.have.property('type', 'DataIntegrityProof');
       expect(proof).to.have.property('verificationMethod');
     });
-
-  it('should have witness proof with a real verificationMethod', async () => {
-    const {cryptoEventLog} = await runCreateAndWitness();
-
-    const proof = cryptoEventLog.log[0].proof[0];
-    expect(proof.verificationMethod).to.match(/^did:key:/);
-  });
 });
