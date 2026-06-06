@@ -36,12 +36,10 @@ describe('create', function() {
     expect(assertionKey.controller).to.equal(didDocument.id);
     expect(assertionKey.publicKeyMultibase).to.be.a('string').that.is.not.empty;
 
-    // recovery: one embedded key
+    // recovery: one base58btc-encoded SHA3-256 multihash of a did:key URI
     expect(didDocument.recovery).to.be.an('array').with.length(1);
-    const recoveryKey = didDocument.recovery[0];
-    expect(recoveryKey.type).to.equal('Multikey');
-    expect(recoveryKey.controller).to.equal(didDocument.id);
-    expect(assertionKey.publicKeyMultibase).to.be.a('string').that.is.not.empty;
+    const recoveryHash = didDocument.recovery[0];
+    expect(recoveryHash).to.be.a('string').that.matches(/^z/);
 
     // service
     expect(didDocument.service).to.have.property('type', 'CelStorageService');
