@@ -3,7 +3,7 @@
  */
 import {
   addEvent, create, createCel, createEvent, getPreviousEventHash, load,
-  loadSecrets, saveSecrets, witness
+  loadSecrets, saveSecrets, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESSES} from './helpers.js';
@@ -171,10 +171,56 @@ describe('save', function() {
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const celPath = join(logsDir, `${didIdentifier}-hb-violation.cel`);
 
-      // backdate the first entry's witness timestamp to well beyond P3M
+      // backdate the first entry's witness timestamp to well beyond P10Y
       const violated = JSON.parse(JSON.stringify(cryptoEventLog));
-      const oldDate = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+      const oldDate = new Date(Date.now() - 4000 * 24 * 60 * 60 * 1000);
       violated.log[0].proof[0].created = oldDate.toISOString();
+      writeFileSync(celPath, JSON.stringify(violated, null, 2));
+
+      const {valid, errors} = await load({filename: celPath});
+
+      expect(valid).to.be.false;
+      expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
+    });
+
+    it('should enforce a tightened heartbeatFrequency after an update', async () => {
+      // entry 0: create with default P3M
+      const {keyPair, event, didDocument} = await create();
+      const cryptoEventLog = createCel({event});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      // entry 1: update heartbeatFrequency to P1D
+      const {didDocument: updatedDoc} =
+        setHeartbeatFrequency({didDocument, heartbeatFrequency: 'P1D'});
+      const updateHash = await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: updateEvent} = await createEvent({
+        type: 'update', data: updatedDoc,
+        assertionMethod: keyPair, previousEventHash: updateHash
+      });
+      await addEvent({cel: cryptoEventLog, event: updateEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      // entry 2: heartbeat — gap from entry 1 to entry 2 will be backdated
+      // to 2 days, which exceeds the new P1D heartbeatFrequency
+      const hbHash = await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: hbEvent} = await createEvent({
+        type: 'heartbeat', data: undefined,
+        assertionMethod: keyPair, previousEventHash: hbHash
+      });
+      await addEvent({cel: cryptoEventLog, event: hbEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      const didIdentifier = updatedDoc.id.replace('did:cel:', '');
+      const celPath = join(logsDir, `${didIdentifier}-p1d-violation.cel`);
+
+      // backdate entry 1's witness timestamp 2 days before entry 2's, so the
+      // gap between the witnessed update (entry 1) and heartbeat (entry 2)
+      // exceeds the P1D heartbeatFrequency now in effect
+      const violated = JSON.parse(JSON.stringify(cryptoEventLog));
+      const entry2Time = new Date(
+        violated.log[2].proof[0].created).getTime();
+      const backdated = new Date(entry2Time - 2 * 24 * 60 * 60 * 1000);
+      violated.log[1].proof[0].created = backdated.toISOString();
       writeFileSync(celPath, JSON.stringify(violated, null, 2));
 
       const {valid, errors} = await load({filename: celPath});
