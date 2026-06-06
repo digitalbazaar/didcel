@@ -152,6 +152,37 @@ describe('save', function() {
       expect(cel.log).to.have.length(2);
     });
 
+    it('should detect a heartbeatFrequency violation', async () => {
+      const {keyPair, event, didDocument} = await create();
+      const cryptoEventLog = createCel({event});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      const previousEventHash =
+        await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: hbEvent} = await createEvent({
+        type: 'heartbeat',
+        data: undefined,
+        assertionMethod: keyPair,
+        previousEventHash
+      });
+      await addEvent({cel: cryptoEventLog, event: hbEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      const didIdentifier = didDocument.id.replace('did:cel:', '');
+      const celPath = join(logsDir, `${didIdentifier}-hb-violation.cel`);
+
+      // backdate the first entry's witness timestamp to well beyond P3M
+      const violated = JSON.parse(JSON.stringify(cryptoEventLog));
+      const oldDate = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+      violated.log[0].proof[0].created = oldDate.toISOString();
+      writeFileSync(celPath, JSON.stringify(violated, null, 2));
+
+      const {valid, errors} = await load({filename: celPath});
+
+      expect(valid).to.be.false;
+      expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
+    });
+
     it('should detect tampering in a saved CEL', async () => {
       const {event, didDocument} = await create();
       const cryptoEventLog = createCel({event});
