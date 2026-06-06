@@ -2,7 +2,7 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, create, createCel, createEvent, witness
+  addEvent, create, createCel, createEvent, getPreviousEventHash, witness
 } from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -15,10 +15,12 @@ async function runHeartbeat() {
 
   await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
 
+  const previousEventHash = await getPreviousEventHash({cel: cryptoEventLog});
   const {event: hbEvent} = await createEvent({
     type: 'heartbeat',
     data: undefined,
-    assertionMethod: keyPair
+    assertionMethod: keyPair,
+    previousEventHash
   });
   await addEvent({cel: cryptoEventLog, event: hbEvent});
 

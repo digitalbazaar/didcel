@@ -2,7 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createCel, createEvent, witness
+  addEvent, addVm, create, createCel, createEvent, getPreviousEventHash,
+  witness
 } from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -20,10 +21,12 @@ async function runUpdate() {
     verificationRelationship: 'authentication'
   });
 
+  const previousEventHash = await getPreviousEventHash({cel: cryptoEventLog});
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    assertionMethod: keyPair
+    assertionMethod: keyPair,
+    previousEventHash
   });
   await addEvent({cel: cryptoEventLog, event: updateEvent});
 

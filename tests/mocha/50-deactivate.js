@@ -2,7 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createCel, createEvent, witness
+  addEvent, addVm, create, createCel, createEvent, getPreviousEventHash,
+  witness
 } from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -20,19 +21,24 @@ async function runDeactivate() {
     verificationRelationship: 'authentication'
   });
 
+  const updatePreviousHash = await getPreviousEventHash({cel: cryptoEventLog});
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    assertionMethod: keyPair
+    assertionMethod: keyPair,
+    previousEventHash: updatePreviousHash
   });
   await addEvent({cel: cryptoEventLog, event: updateEvent});
 
   await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
 
+  const deactivatePreviousHash =
+    await getPreviousEventHash({cel: cryptoEventLog});
   const {event: deactivateEvent} = await createEvent({
     type: 'deactivate',
     data: undefined,
-    assertionMethod: keyPair
+    assertionMethod: keyPair,
+    previousEventHash: deactivatePreviousHash
   });
   await addEvent({cel: cryptoEventLog, event: deactivateEvent});
 

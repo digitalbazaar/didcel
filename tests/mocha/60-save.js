@@ -2,8 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, create, createCel, createEvent, load, loadSecrets, saveSecrets,
-  witness
+  addEvent, create, createCel, createEvent, getPreviousEventHash, load,
+  loadSecrets, saveSecrets, witness
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESSES} from './helpers.js';
@@ -130,10 +130,13 @@ describe('save', function() {
       const cryptoEventLog = createCel({event});
       await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
 
+      const previousEventHash =
+        await getPreviousEventHash({cel: cryptoEventLog});
       const {event: hbEvent} = await createEvent({
         type: 'heartbeat',
         data: undefined,
-        assertionMethod: keyPair
+        assertionMethod: keyPair,
+        previousEventHash
       });
       await addEvent({cel: cryptoEventLog, event: hbEvent});
       await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
