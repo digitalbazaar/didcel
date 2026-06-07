@@ -41,9 +41,10 @@ describe('create', function() {
     const recoveryHash = didDocument.recovery[0];
     expect(recoveryHash).to.be.a('string').that.matches(/^z/);
 
-    // service
-    expect(didDocument.service).to.have.property('type', 'CelStorageService');
-    expect(didDocument.service.serviceEndpoint).to.be.an('array')
+    // service: must be an array of service objects (DID Core conformant)
+    expect(didDocument.service).to.be.an('array').with.length.at.least(1);
+    expect(didDocument.service[0]).to.have.property('type', 'CelStorageService');
+    expect(didDocument.service[0].serviceEndpoint).to.be.an('array')
       .with.length.at.least(1);
 
     // CEL create event
