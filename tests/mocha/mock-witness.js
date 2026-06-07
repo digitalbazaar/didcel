@@ -20,7 +20,7 @@ import canonicalize from 'canonicalize';
 import crypto from 'node:crypto';
 import http from 'node:http';
 
-// SHA2-256 multihash header is 2 bytes: [0x12, 0x20]
+// SHA3-256 multihash header is 2 bytes: [0x16, 0x20]
 const MULTIHASH_HEADER_LENGTH = 2;
 
 let _server = null;
