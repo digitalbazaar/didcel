@@ -1,22 +1,16 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {create, createCel} from '../../lib/index.js';
+import {create} from '../../lib/index.js';
 import chai from 'chai';
 
 const {expect} = chai;
-
-async function runCreate() {
-  const {event, didDocument} = await create();
-  const cryptoEventLog = createCel({event});
-  return {didDocument, cryptoEventLog};
-}
 
 describe('create', function() {
   this.timeout(30000);
 
   it('should create a well-formed DID document', async () => {
-    const {didDocument, cryptoEventLog} = await runCreate();
+    const {didDocument, cryptographicEventLog} = await create();
 
     // identifier
     expect(didDocument.id).to.match(/^did:cel:z/);
@@ -48,7 +42,7 @@ describe('create', function() {
       .with.length.at.least(1);
 
     // CEL create event
-    const createEntry = cryptoEventLog.log[0];
+    const createEntry = cryptographicEventLog.log[0];
     expect(createEntry.event.operation.type).to.equal('create');
     expect(createEntry.event.operation.data.id).to.equal(didDocument.id);
     expect(createEntry.event.proof).to.have.property(

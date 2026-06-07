@@ -2,7 +2,7 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createCel, createEvent, getPreviousEventHash,
+  addEvent, addVm, create, createEvent, getPreviousEventHash,
   hashDidKey, load, witness
 } from '../../lib/index.js';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
@@ -16,9 +16,9 @@ const {expect} = chai;
 // Build a DID document that uses a recovery key to add a new assertionMethod
 // key and rotate the recovery hash. Returns the full CEL and the new key pair.
 async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
-  const {keyPair, recoveryKeyPair, event, didDocument} = await create();
-  const cryptoEventLog = createCel({event});
-  await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+  const {keyPair, recoveryKeyPair, didDocument, cryptographicEventLog} =
+    await create();
+  await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
   // add a new assertionMethod key to the DID document
   const {keyPair: newKeyPair, didDocument: docWithNewKey} = await addVm({
@@ -31,8 +31,7 @@ async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
 
   if(rotateRecovery) {
     // generate a new recovery key pair and hash its did:key URI
-    const {recoveryKeyPair: newRecoveryKeyPair, event: _unused, ...rest} =
-      await create();
+    const {recoveryKeyPair: newRecoveryKeyPair} = await create();
     const newRecoveryExported = await newRecoveryKeyPair.export(
       {publicKey: true, includeContext: false});
     const newRecoveryDidKey =
@@ -47,17 +46,17 @@ async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
   // (if rotateRecovery is false we leave recovery[] unchanged — bad practice)
 
   // sign with the recovery key pair (verificationMethod = its did:key URI)
-  const previousEventHash = await getPreviousEventHash({cel: cryptoEventLog});
+  const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
   const {event: recoveryEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
     assertionMethod: recoveryKeyPair,
     previousEventHash
   });
-  await addEvent({cel: cryptoEventLog, event: recoveryEvent});
-  await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+  await addEvent({cel: cryptographicEventLog, event: recoveryEvent});
+  await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-  return {cryptoEventLog, didDocument: updatedDoc, newKeyPair};
+  return {cryptographicEventLog, didDocument: updatedDoc, newKeyPair};
 }
 
 describe('recovery', function() {
@@ -83,10 +82,10 @@ describe('recovery', function() {
 
   it('should allow a recovery key to add an assertionMethod key and ' +
       'rotate the recovery hash', async () => {
-    const {cryptoEventLog, didDocument} = await buildRecoveryUpdate();
+    const {cryptographicEventLog, didDocument} = await buildRecoveryUpdate();
 
     // the update event must be present and signed by a did:key VM
-    const updateEntry = cryptoEventLog.log[1];
+    const updateEntry = cryptographicEventLog.log[1];
     expect(updateEntry.event.operation.type).to.equal('update');
     const vmRef = updateEntry.event.proof.verificationMethod;
     expect(vmRef).to.match(/^did:key:/);
@@ -95,14 +94,14 @@ describe('recovery', function() {
     expect(didDocument.assertionMethod).to.be.an('array').with.length(2);
 
     // recovery hash must have been rotated (old hash gone, new one present)
-    const originalDoc = cryptoEventLog.log[0].event.operation.data;
+    const originalDoc = cryptographicEventLog.log[0].event.operation.data;
     const originalHash = originalDoc.recovery[0];
     expect(didDocument.recovery).to.not.include(originalHash);
     expect(didDocument.recovery).to.have.length(1);
 
     // save and load must validate cleanly
     const celPath = join(logsDir, 'recovery-positive.cel');
-    writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
+    writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
     const {valid, errors} = await load(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
     expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
@@ -110,11 +109,11 @@ describe('recovery', function() {
 
   it('should reject a recovery-key update that does not rotate the ' +
       'recovery hash', async () => {
-    const {cryptoEventLog} =
+    const {cryptographicEventLog} =
       await buildRecoveryUpdate({rotateRecovery: false});
 
     const celPath = join(logsDir, 'recovery-no-rotate.cel');
-    writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
+    writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
     const {valid, errors} = await load(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
@@ -125,10 +124,9 @@ describe('recovery', function() {
   it('should reject a recovery-key update after the heartbeatFrequency ' +
       'window has expired', async () => {
     // create with a very tight heartbeatFrequency of P1D
-    const {recoveryKeyPair, event, didDocument} =
+    const {recoveryKeyPair, didDocument, cryptographicEventLog} =
       await create({heartbeatFrequency: 'P1D'});
-    const cryptoEventLog = createCel({event});
-    await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+    await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
     // build the recovery update document (with proper rotation)
     const {keyPair: _newKey, didDocument: docWithNewKey} = await addVm({
@@ -146,19 +144,19 @@ describe('recovery', function() {
     updatedDoc.recovery = updatedDoc.recovery.filter(h => h !== oldHash);
     updatedDoc.recovery.push(newRecoveryHash);
 
-    const previousEventHash = await getPreviousEventHash({cel: cryptoEventLog});
+    const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
     const {event: recoveryEvent} = await createEvent({
       type: 'update',
       data: updatedDoc,
       assertionMethod: recoveryKeyPair,
       previousEventHash
     });
-    await addEvent({cel: cryptoEventLog, event: recoveryEvent});
-    await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+    await addEvent({cel: cryptographicEventLog, event: recoveryEvent});
+    await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
     // backdate the first entry's witness timestamp by 2 days so the gap
     // from the create witness to the recovery update witness exceeds P1D
-    const violated = JSON.parse(JSON.stringify(cryptoEventLog));
+    const violated = JSON.parse(JSON.stringify(cryptographicEventLog));
     const entry1Time = new Date(
       violated.log[1].proof[0].created).getTime();
     const backdated = new Date(entry1Time - 2 * 24 * 60 * 60 * 1000);

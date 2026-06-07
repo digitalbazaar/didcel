@@ -2,8 +2,7 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createCel, createEvent, getPreviousEventHash,
-  witness
+  addEvent, addVm, create, createEvent, getPreviousEventHash, witness
 } from '../../lib/index.js';
 import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -11,44 +10,44 @@ import chai from 'chai';
 const {expect} = chai;
 
 async function runUpdate() {
-  const {keyPair, event, didDocument} = await create();
-  const cryptoEventLog = createCel({event});
+  const {keyPair, didDocument, cryptographicEventLog} = await create();
 
-  await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+  await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
   const {didDocument: updatedDoc} = await addVm({
     didDocument,
     verificationRelationship: 'authentication'
   });
 
-  const previousEventHash = await getPreviousEventHash({cel: cryptoEventLog});
+  const previousEventHash =
+    await getPreviousEventHash({cel: cryptographicEventLog});
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
     assertionMethod: keyPair,
     previousEventHash
   });
-  await addEvent({cel: cryptoEventLog, event: updateEvent});
+  await addEvent({cel: cryptographicEventLog, event: updateEvent});
 
-  await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+  await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-  return {cryptoEventLog};
+  return {cryptographicEventLog};
 }
 
 describe('update', function() {
   this.timeout(120000);
 
   it('should produce a CEL with 2 events (create + update)', async () => {
-    const {cryptoEventLog} = await runUpdate();
+    const {cryptographicEventLog} = await runUpdate();
 
-    expect(cryptoEventLog).to.have.property('log');
-    expect(cryptoEventLog.log).to.have.length(2);
+    expect(cryptographicEventLog).to.have.property('log');
+    expect(cryptographicEventLog.log).to.have.length(2);
   });
 
   it('should hashlink events via previousEventHash', async () => {
-    const {cryptoEventLog} = await runUpdate();
+    const {cryptographicEventLog} = await runUpdate();
 
-    const updateEntry = cryptoEventLog.log[1];
+    const updateEntry = cryptographicEventLog.log[1];
     expect(updateEntry.event).to.have.property('previousEventHash');
     expect(updateEntry.event.previousEventHash).to.be.a('string');
     expect(updateEntry.event.previousEventHash).to.match(/^z/);
@@ -56,9 +55,9 @@ describe('update', function() {
 
   it('should include the new authentication key in the update event',
     async () => {
-      const {cryptoEventLog} = await runUpdate();
+      const {cryptographicEventLog} = await runUpdate();
 
-      const updateEntry = cryptoEventLog.log[1];
+      const updateEntry = cryptographicEventLog.log[1];
       expect(updateEntry.event.operation.type).to.equal('update');
       const didDoc = updateEntry.event.operation.data;
       expect(didDoc).to.have.property('authentication');
@@ -67,9 +66,9 @@ describe('update', function() {
     });
 
   it('should have witness proofs on both events', async () => {
-    const {cryptoEventLog} = await runUpdate();
+    const {cryptographicEventLog} = await runUpdate();
 
-    for(const entry of cryptoEventLog.log) {
+    for(const entry of cryptographicEventLog.log) {
       expect(entry).to.have.property('proof');
       expect(entry.proof).to.be.an('array');
       expect(entry.proof.length).to.be.at.least(1);
@@ -78,9 +77,9 @@ describe('update', function() {
 
   it('should throw MALFORMED_CEL_ERROR when adding an event to an empty log',
     async () => {
-      const {keyPair, event} = await create();
+      const {keyPair, didDocument} = await create();
       const {event: updateEvent} = await createEvent({
-        type: 'update', data: event.operation.data, assertionMethod: keyPair,
+        type: 'update', data: didDocument, assertionMethod: keyPair,
         previousEventHash: undefined
       });
 
