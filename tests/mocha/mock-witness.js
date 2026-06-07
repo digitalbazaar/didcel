@@ -15,7 +15,7 @@
  */
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
 import {base58btc} from 'multiformats/bases/base58';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESSES, TEST_WITNESS_DIDS} from './helpers.js';
 import canonicalize from 'canonicalize';
 import crypto from 'node:crypto';
 import http from 'node:http';
@@ -43,6 +43,8 @@ export async function start() {
   const url = `http://127.0.0.1:${port}/witness`;
   // populate the shared TEST_WITNESSES array so all test files see it
   TEST_WITNESSES.push(url);
+  // expose the witness DID so tests can build trustedWitnesses lists
+  TEST_WITNESS_DIDS.push(didKeyId);
 }
 
 export function stop() {

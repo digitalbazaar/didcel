@@ -6,7 +6,7 @@ import {
   loadSecrets, saveSecrets, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
-import {TEST_PASSWORD, TEST_WITNESSES} from './helpers.js';
+import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import chai from 'chai';
@@ -107,6 +107,16 @@ describe('save', function() {
   });
 
   describe('cel.load', function() {
+    // Build a trustedWitnesses list covering the entire test epoch.
+    // TEST_WITNESS_DIDS is populated by mock-witness.js start().
+    function getTrustedWitnesses() {
+      return TEST_WITNESS_DIDS.map(id => ({
+        id,
+        validFrom: '2000-01-01T00:00:00Z',
+        validUntil: '2099-01-01T00:00:00Z'
+      }));
+    }
+
     it('should save and load a valid CEL', async () => {
       const {event, didDocument} = await create();
       const cryptoEventLog = createCel({event});
@@ -117,7 +127,7 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
 
       const {cel, valid, errors, didDocument: loadedDoc} =
-        await load({filename: celPath});
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
@@ -145,11 +155,54 @@ describe('save', function() {
       const celPath = join(logsDir, `${didIdentifier}.cel`);
       writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
 
-      const {valid, errors, cel} = await load({filename: celPath});
+      const {valid, errors, cel} =
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
       expect(cel.log).to.have.length(2);
+    });
+
+    it('should resolve historical DID state using versionTime', async () => {
+      const {keyPair, event, didDocument} = await create();
+      const cryptoEventLog = createCel({event});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      // capture the witness timestamp of the create entry as the cutoff
+      const createWitnessTime =
+        cryptoEventLog.log[0].proof[0].created;
+
+      // add a heartbeat entry after a small delay
+      const previousEventHash =
+        await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: hbEvent} = await createEvent({
+        type: 'heartbeat', data: undefined,
+        assertionMethod: keyPair, previousEventHash
+      });
+      await addEvent({cel: cryptoEventLog, event: hbEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      const didIdentifier = didDocument.id.replace('did:cel:', '');
+      const celPath = join(logsDir, `${didIdentifier}-versiontime.cel`);
+
+      // set the heartbeat's witness timestamp to 1 hour after the create
+      const snapshotted = JSON.parse(JSON.stringify(cryptoEventLog));
+      const laterTime = new Date(
+        new Date(createWitnessTime).getTime() + 60 * 60 * 1000).toISOString();
+      snapshotted.log[1].proof[0].created = laterTime;
+      writeFileSync(celPath, JSON.stringify(snapshotted, null, 2));
+
+      // resolving at the create witness time should stop before the heartbeat
+      // entry (whose witness timestamp is 1 hour later), so the returned
+      // didDocument should match the original create-event document
+      const {valid, errors, didDocument: resolvedDoc} = await load({
+        filename: celPath,
+        trustedWitnesses: getTrustedWitnesses(),
+        versionTime: createWitnessTime
+      });
+
+      expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
+      expect(resolvedDoc.id).to.equal(didDocument.id);
     });
 
     it('should detect a heartbeatFrequency violation', async () => {
@@ -177,7 +230,8 @@ describe('save', function() {
       violated.log[0].proof[0].created = oldDate.toISOString();
       writeFileSync(celPath, JSON.stringify(violated, null, 2));
 
-      const {valid, errors} = await load({filename: celPath});
+      const {valid, errors} =
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
@@ -223,7 +277,8 @@ describe('save', function() {
       violated.log[1].proof[0].created = backdated.toISOString();
       writeFileSync(celPath, JSON.stringify(violated, null, 2));
 
-      const {valid, errors} = await load({filename: celPath});
+      const {valid, errors} =
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
@@ -242,7 +297,8 @@ describe('save', function() {
       tampered.log[0].event.operation.data.id = 'did:cel:zTAMPERED';
       writeFileSync(celPath, JSON.stringify(tampered, null, 2));
 
-      const {valid, errors} = await load({filename: celPath});
+      const {valid, errors} =
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors).to.have.length.at.least(1);

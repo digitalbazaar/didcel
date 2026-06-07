@@ -5,7 +5,7 @@ import {
   addEvent, addVm, create, createCel, createEvent, getPreviousEventHash,
   hashDidKey, load, witness
 } from '../../lib/index.js';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import {join} from 'node:path';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -65,6 +65,14 @@ describe('recovery', function() {
 
   let logsDir;
 
+  function getTrustedWitnesses() {
+    return TEST_WITNESS_DIDS.map(id => ({
+      id,
+      validFrom: '2000-01-01T00:00:00Z',
+      validUntil: '2099-01-01T00:00:00Z'
+    }));
+  }
+
   before(() => {
     logsDir = mkdtempSync(join(tmpdir(), 'didcel-recovery-test-'));
   });
@@ -95,7 +103,8 @@ describe('recovery', function() {
     // save and load must validate cleanly
     const celPath = join(logsDir, 'recovery-positive.cel');
     writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
-    const {valid, errors} = await load({filename: celPath});
+    const {valid, errors} = await load(
+      {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
     expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
   });
 
@@ -106,7 +115,8 @@ describe('recovery', function() {
 
     const celPath = join(logsDir, 'recovery-no-rotate.cel');
     writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
-    const {valid, errors} = await load({filename: celPath});
+    const {valid, errors} = await load(
+      {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
     expect(valid).to.be.false;
     expect(errors.some(e => e.includes('rotating its hash'))).to.be.true;
@@ -156,7 +166,8 @@ describe('recovery', function() {
 
     const celPath = join(logsDir, 'recovery-expired.cel');
     writeFileSync(celPath, JSON.stringify(violated, null, 2));
-    const {valid, errors} = await load({filename: celPath});
+    const {valid, errors} = await load(
+      {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
     expect(valid).to.be.false;
     expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
