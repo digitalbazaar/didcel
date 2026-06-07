@@ -303,5 +303,40 @@ describe('save', function() {
       expect(valid).to.be.false;
       expect(errors).to.have.length.at.least(1);
     });
+
+    it('should reject any operation after a deactivate event', async () => {
+      const {keyPair, event, didDocument} = await create();
+      const cryptoEventLog = createCel({event});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      // append a deactivate event
+      const deactivateHash = await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: deactivateEvent} = await createEvent({
+        type: 'deactivate', data: undefined,
+        assertionMethod: keyPair, previousEventHash: deactivateHash
+      });
+      await addEvent({cel: cryptoEventLog, event: deactivateEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      // append a heartbeat after the deactivate (invalid)
+      const postDeactivateHash =
+        await getPreviousEventHash({cel: cryptoEventLog});
+      const {event: heartbeatEvent} = await createEvent({
+        type: 'heartbeat', data: undefined,
+        assertionMethod: keyPair, previousEventHash: postDeactivateHash
+      });
+      await addEvent({cel: cryptoEventLog, event: heartbeatEvent});
+      await witness({cel: cryptoEventLog, witnesses: TEST_WITNESSES});
+
+      const didIdentifier = didDocument.id.replace('did:cel:', '');
+      const celPath = join(logsDir, `${didIdentifier}-post-deactivate.cel`);
+      writeFileSync(celPath, JSON.stringify(cryptoEventLog, null, 2));
+
+      const {valid, errors} =
+        await load({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+
+      expect(valid).to.be.false;
+      expect(errors.some(e => e.includes('after deactivation'))).to.be.true;
+    });
   });
 });
