@@ -5,8 +5,7 @@ import {
   addEvent, create, createEvent, getPreviousEventHash, loadFromFile,
   loadSecrets, saveSecrets, saveToFile, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
-import {gzipSync} from 'node:zlib';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
 import {join} from 'node:path';
@@ -320,7 +319,7 @@ describe('save', function() {
       await addEvent({cel: cryptographicEventLog, event: deactivateEvent});
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-      // force a heartbeat entry directly into the log after deactivate (invalid)
+      // force a heartbeat entry directly into the log after deactivate
       // bypassing addEvent's deactivation guard to construct an invalid CEL
       // that read() should reject
       const postDeactivateHash =
