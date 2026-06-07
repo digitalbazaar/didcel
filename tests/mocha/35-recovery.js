@@ -3,7 +3,7 @@
  */
 import {
   addEvent, addVm, create, createEvent, getPreviousEventHash,
-  hashDidKey, load, witness
+  hashDidKey, loadFromFile, witness
 } from '../../lib/index.js';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import {join} from 'node:path';
@@ -102,7 +102,7 @@ describe('recovery', function() {
     // save and load must validate cleanly
     const celPath = join(logsDir, 'recovery-positive.cel');
     writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
-    const {valid, errors} = await load(
+    const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
     expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
   });
@@ -114,7 +114,7 @@ describe('recovery', function() {
 
     const celPath = join(logsDir, 'recovery-no-rotate.cel');
     writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
-    const {valid, errors} = await load(
+    const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
     expect(valid).to.be.false;
@@ -164,7 +164,7 @@ describe('recovery', function() {
 
     const celPath = join(logsDir, 'recovery-expired.cel');
     writeFileSync(celPath, JSON.stringify(violated, null, 2));
-    const {valid, errors} = await load(
+    const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
     expect(valid).to.be.false;
