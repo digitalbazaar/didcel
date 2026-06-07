@@ -3,9 +3,9 @@
  */
 import {
   addEvent, addVm, create, createEvent, getPreviousEventHash,
-  hashDidKey, loadFromFile, witness
+  hashDidKey, loadFromFile, saveToFile, witness
 } from '../../lib/index.js';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, rmSync} from 'node:fs';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
 import {join} from 'node:path';
@@ -27,7 +27,7 @@ async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
   });
 
   // clone the document so we can manipulate recovery independently
-  const updatedDoc = JSON.parse(JSON.stringify(docWithNewKey));
+  const updatedDoc = structuredClone(docWithNewKey);
 
   if(rotateRecovery) {
     // generate a new recovery key pair and hash its did:key URI
@@ -102,7 +102,7 @@ describe('recovery', function() {
 
     // save and load must validate cleanly
     const celPath = join(logsDir, 'recovery-positive.cel');
-    writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
+    saveToFile({filename: celPath, cel: cryptographicEventLog});
     const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
     expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
@@ -114,7 +114,7 @@ describe('recovery', function() {
       await buildRecoveryUpdate({rotateRecovery: false});
 
     const celPath = join(logsDir, 'recovery-no-rotate.cel');
-    writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
+    saveToFile({filename: celPath, cel: cryptographicEventLog});
     const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
@@ -133,7 +133,7 @@ describe('recovery', function() {
     const {didDocument: docWithNewKey} = await addVm({
       didDocument, verificationRelationship: 'assertionMethod'
     });
-    const updatedDoc = JSON.parse(JSON.stringify(docWithNewKey));
+    const updatedDoc = structuredClone(docWithNewKey);
 
     // rotate the recovery hash
     const newRecoveryExported = await (await create()).recoveryKeyPair.export(
@@ -158,14 +158,14 @@ describe('recovery', function() {
 
     // backdate the first entry's witness timestamp by 2 days so the gap
     // from the create witness to the recovery update witness exceeds P1D
-    const violated = JSON.parse(JSON.stringify(cryptographicEventLog));
+    const violated = structuredClone(cryptographicEventLog);
     const entry1Time = new Date(
       violated.log[1].proof[0].created).getTime();
     const backdated = new Date(entry1Time - 2 * 24 * 60 * 60 * 1000);
     violated.log[0].proof[0].created = backdated.toISOString();
 
     const celPath = join(logsDir, 'recovery-expired.cel');
-    writeFileSync(celPath, JSON.stringify(violated, null, 2));
+    saveToFile({filename: celPath, cel: violated});
     const {valid, errors} = await loadFromFile(
       {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 

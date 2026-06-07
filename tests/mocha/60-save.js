@@ -3,8 +3,9 @@
  */
 import {
   addEvent, create, createEvent, getPreviousEventHash, loadFromFile,
-  loadSecrets, saveSecrets, setHeartbeatFrequency, witness
+  loadSecrets, saveSecrets, saveToFile, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
+import {gzipSync} from 'node:zlib';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -123,7 +124,7 @@ describe('save', function() {
 
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const celPath = join(logsDir, `${didIdentifier}.cel`);
-      writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
+      saveToFile({filename: celPath, cel: cryptographicEventLog});
 
       const {cel, valid, errors, didDocument: loadedDoc} =
         await loadFromFile(
@@ -152,7 +153,7 @@ describe('save', function() {
 
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const celPath = join(logsDir, `${didIdentifier}.cel`);
-      writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
+      saveToFile({filename: celPath, cel: cryptographicEventLog});
 
       const {valid, errors, cel} =
         await loadFromFile(
@@ -189,7 +190,7 @@ describe('save', function() {
       const laterTime = new Date(
         new Date(createWitnessTime).getTime() + 60 * 60 * 1000).toISOString();
       snapshotted.log[1].proof[0].created = laterTime;
-      writeFileSync(celPath, JSON.stringify(snapshotted, null, 2));
+      saveToFile({filename: celPath, cel: snapshotted});
 
       // resolving at the create witness time should stop before the heartbeat
       // entry (whose witness timestamp is 1 hour later), so the returned
@@ -226,7 +227,7 @@ describe('save', function() {
       const violated = JSON.parse(JSON.stringify(cryptographicEventLog));
       const oldDate = new Date(Date.now() - 4000 * 24 * 60 * 60 * 1000);
       violated.log[0].proof[0].created = oldDate.toISOString();
-      writeFileSync(celPath, JSON.stringify(violated, null, 2));
+      saveToFile({filename: celPath, cel: violated});
 
       const {valid, errors} =
         await loadFromFile(
@@ -275,7 +276,7 @@ describe('save', function() {
           violated.log[2].proof[0].created).getTime();
         const backdated = new Date(entry2Time - 2 * 24 * 60 * 60 * 1000);
         violated.log[1].proof[0].created = backdated.toISOString();
-        writeFileSync(celPath, JSON.stringify(violated, null, 2));
+        saveToFile({filename: celPath, cel: violated});
 
         const {valid, errors} =
         await loadFromFile(
@@ -293,9 +294,9 @@ describe('save', function() {
       const celPath = join(logsDir, `${didIdentifier}-tampered.cel`);
 
       // tamper with the DID document inside the event
-      const tampered = JSON.parse(JSON.stringify(cryptographicEventLog));
+      const tampered = structuredClone(cryptographicEventLog);
       tampered.log[0].event.operation.data.id = 'did:cel:zTAMPERED';
-      writeFileSync(celPath, JSON.stringify(tampered, null, 2));
+      saveToFile({filename: celPath, cel: tampered});
 
       const {valid, errors} =
         await loadFromFile(
@@ -319,19 +320,20 @@ describe('save', function() {
       await addEvent({cel: cryptographicEventLog, event: deactivateEvent});
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-      // append a heartbeat after the deactivate (invalid)
+      // force a heartbeat entry directly into the log after deactivate (invalid)
+      // bypassing addEvent's deactivation guard to construct an invalid CEL
+      // that read() should reject
       const postDeactivateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
       const {event: heartbeatEvent} = await createEvent({
         type: 'heartbeat', data: undefined,
         assertionMethod: keyPair, previousEventHash: postDeactivateHash
       });
-      await addEvent({cel: cryptographicEventLog, event: heartbeatEvent});
-      await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+      cryptographicEventLog.log.push({event: heartbeatEvent});
 
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const celPath = join(logsDir, `${didIdentifier}-post-deactivate.cel`);
-      writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
+      saveToFile({filename: celPath, cel: cryptographicEventLog});
 
       const {valid, errors} =
         await loadFromFile(
