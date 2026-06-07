@@ -75,4 +75,23 @@ describe('update', function() {
       expect(entry.proof.length).to.be.at.least(1);
     }
   });
+
+  it('should throw MALFORMED_CEL_ERROR when adding an event to an empty log',
+    async () => {
+      const {keyPair, event} = await create();
+      const {event: updateEvent} = await createEvent({
+        type: 'update', data: event.operation.data, assertionMethod: keyPair,
+        previousEventHash: undefined
+      });
+
+      let error;
+      try {
+        await addEvent({cel: {log: []}, event: updateEvent});
+      } catch(e) {
+        error = e;
+      }
+
+      expect(error).to.exist;
+      expect(error.name).to.equal('MALFORMED_CEL_ERROR');
+    });
 });
