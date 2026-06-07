@@ -5,18 +5,18 @@ import {
   addEvent, addVm, create, createEvent, getPreviousEventHash,
   hashDidKey, loadFromFile, witness
 } from '../../lib/index.js';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
-import {join} from 'node:path';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
-import {tmpdir} from 'node:os';
 import chai from 'chai';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 
 const {expect} = chai;
 
 // Build a DID document that uses a recovery key to add a new assertionMethod
 // key and rotate the recovery hash. Returns the full CEL and the new key pair.
 async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
-  const {keyPair, recoveryKeyPair, didDocument, cryptographicEventLog} =
+  const {recoveryKeyPair, didDocument, cryptographicEventLog} =
     await create();
   await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
@@ -46,7 +46,8 @@ async function buildRecoveryUpdate({rotateRecovery = true} = {}) {
   // (if rotateRecovery is false we leave recovery[] unchanged — bad practice)
 
   // sign with the recovery key pair (verificationMethod = its did:key URI)
-  const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
+  const previousEventHash =
+    await getPreviousEventHash({cel: cryptographicEventLog});
   const {event: recoveryEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
@@ -129,7 +130,7 @@ describe('recovery', function() {
     await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
     // build the recovery update document (with proper rotation)
-    const {keyPair: _newKey, didDocument: docWithNewKey} = await addVm({
+    const {didDocument: docWithNewKey} = await addVm({
       didDocument, verificationRelationship: 'assertionMethod'
     });
     const updatedDoc = JSON.parse(JSON.stringify(docWithNewKey));
@@ -144,7 +145,8 @@ describe('recovery', function() {
     updatedDoc.recovery = updatedDoc.recovery.filter(h => h !== oldHash);
     updatedDoc.recovery.push(newRecoveryHash);
 
-    const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
+    const previousEventHash =
+      await getPreviousEventHash({cel: cryptographicEventLog});
     const {event: recoveryEvent} = await createEvent({
       type: 'update',
       data: updatedDoc,

@@ -4,8 +4,8 @@
 import {
   addEvent, create, createEvent, getPreviousEventHash, witness
 } from '../../lib/index.js';
-import {TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
+import {TEST_WITNESSES} from './helpers.js';
 
 const {expect} = chai;
 

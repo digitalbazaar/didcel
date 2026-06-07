@@ -1,8 +1,8 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {create} from '../../lib/index.js';
 import chai from 'chai';
+import {create} from '../../lib/index.js';
 
 const {expect} = chai;
 
@@ -37,7 +37,8 @@ describe('create', function() {
 
     // service: must be an array of service objects (DID Core conformant)
     expect(didDocument.service).to.be.an('array').with.length.at.least(1);
-    expect(didDocument.service[0]).to.have.property('type', 'CelStorageService');
+    expect(didDocument.service[0]).to.have.property(
+      'type', 'CelStorageService');
     expect(didDocument.service[0].serviceEndpoint).to.be.an('array')
       .with.length.at.least(1);
 

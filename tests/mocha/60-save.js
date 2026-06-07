@@ -7,9 +7,9 @@ import {
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
+import chai from 'chai';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import chai from 'chai';
 
 const {expect} = chai;
 
@@ -126,7 +126,8 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
 
       const {cel, valid, errors, didDocument: loadedDoc} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
@@ -154,7 +155,8 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
 
       const {valid, errors, cel} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
@@ -227,58 +229,61 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(violated, null, 2));
 
       const {valid, errors} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
     });
 
-    it('should enforce a tightened heartbeatFrequency after an update', async () => {
-      // entry 0: create with default P3M
-      const {keyPair, didDocument, cryptographicEventLog} = await create();
-      await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+    it('should enforce a tightened heartbeatFrequency after update',
+      async () => {
+        // entry 0: create with default P3M
+        const {keyPair, didDocument, cryptographicEventLog} = await create();
+        await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-      // entry 1: update heartbeatFrequency to P1D
-      const {didDocument: updatedDoc} =
+        // entry 1: update heartbeatFrequency to P1D
+        const {didDocument: updatedDoc} =
         setHeartbeatFrequency({didDocument, heartbeatFrequency: 'P1D'});
-      const updateHash =
+        const updateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: updateEvent} = await createEvent({
-        type: 'update', data: updatedDoc,
-        assertionMethod: keyPair, previousEventHash: updateHash
+        const {event: updateEvent} = await createEvent({
+          type: 'update', data: updatedDoc,
+          assertionMethod: keyPair, previousEventHash: updateHash
+        });
+        await addEvent({cel: cryptographicEventLog, event: updateEvent});
+        await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+        // entry 2: heartbeat — gap from entry 1 to entry 2 will be backdated
+        // to 2 days, which exceeds the new P1D heartbeatFrequency
+        const hbHash = await getPreviousEventHash({cel: cryptographicEventLog});
+        const {event: hbEvent} = await createEvent({
+          type: 'heartbeat', data: undefined,
+          assertionMethod: keyPair, previousEventHash: hbHash
+        });
+        await addEvent({cel: cryptographicEventLog, event: hbEvent});
+        await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+        const didIdentifier = updatedDoc.id.replace('did:cel:', '');
+        const celPath = join(logsDir, `${didIdentifier}-p1d-violation.cel`);
+
+        // backdate entry 1's witness timestamp 2 days before entry 2's, so the
+        // gap between the witnessed update (entry 1) and heartbeat (entry 2)
+        // exceeds the P1D heartbeatFrequency now in effect
+        const violated = JSON.parse(JSON.stringify(cryptographicEventLog));
+        const entry2Time = new Date(
+          violated.log[2].proof[0].created).getTime();
+        const backdated = new Date(entry2Time - 2 * 24 * 60 * 60 * 1000);
+        violated.log[1].proof[0].created = backdated.toISOString();
+        writeFileSync(celPath, JSON.stringify(violated, null, 2));
+
+        const {valid, errors} =
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+
+        expect(valid).to.be.false;
+        expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
       });
-      await addEvent({cel: cryptographicEventLog, event: updateEvent});
-      await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
-
-      // entry 2: heartbeat — gap from entry 1 to entry 2 will be backdated
-      // to 2 days, which exceeds the new P1D heartbeatFrequency
-      const hbHash = await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: hbEvent} = await createEvent({
-        type: 'heartbeat', data: undefined,
-        assertionMethod: keyPair, previousEventHash: hbHash
-      });
-      await addEvent({cel: cryptographicEventLog, event: hbEvent});
-      await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
-
-      const didIdentifier = updatedDoc.id.replace('did:cel:', '');
-      const celPath = join(logsDir, `${didIdentifier}-p1d-violation.cel`);
-
-      // backdate entry 1's witness timestamp 2 days before entry 2's, so the
-      // gap between the witnessed update (entry 1) and heartbeat (entry 2)
-      // exceeds the P1D heartbeatFrequency now in effect
-      const violated = JSON.parse(JSON.stringify(cryptographicEventLog));
-      const entry2Time = new Date(
-        violated.log[2].proof[0].created).getTime();
-      const backdated = new Date(entry2Time - 2 * 24 * 60 * 60 * 1000);
-      violated.log[1].proof[0].created = backdated.toISOString();
-      writeFileSync(celPath, JSON.stringify(violated, null, 2));
-
-      const {valid, errors} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
-
-      expect(valid).to.be.false;
-      expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
-    });
 
     it('should detect tampering in a saved CEL', async () => {
       const {didDocument, cryptographicEventLog} = await create();
@@ -293,7 +298,8 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(tampered, null, 2));
 
       const {valid, errors} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors).to.have.length.at.least(1);
@@ -328,7 +334,8 @@ describe('save', function() {
       writeFileSync(celPath, JSON.stringify(cryptographicEventLog, null, 2));
 
       const {valid, errors} =
-        await loadFromFile({filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+        await loadFromFile(
+          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('after deactivation'))).to.be.true;

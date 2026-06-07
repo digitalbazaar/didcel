@@ -7,15 +7,15 @@
  *
  * The protocol:
  *   POST {url}  body: {digestMultibase}
- *   Response:   {proof: DataIntegrityProof}
+ *   Response:   {proof: DataIntegrityProof}.
  *
  * The witness signs verifyData = SHA256(canonicalize(proofOptions)) || rawHash
  * where rawHash is the 32-byte SHA2-256 digest extracted from the received
  * multihash. This exactly matches what cel.js _verifyWitnessProof() expects.
  */
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
+import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import {base58btc} from 'multiformats/bases/base58';
-import {TEST_WITNESSES, TEST_WITNESS_DIDS} from './helpers.js';
 import canonicalize from 'canonicalize';
 import crypto from 'node:crypto';
 import http from 'node:http';
