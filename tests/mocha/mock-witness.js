@@ -80,6 +80,7 @@ async function _handleRequest(req, res) {
       '@context': 'https://w3id.org/security/data-integrity/v2',
       created: new Date().toISOString(),
       cryptosuite: 'ecdsa-jcs-2019',
+      proofPurpose: 'assertionMethod',
       type: 'DataIntegrityProof',
       verificationMethod: _verificationMethod
     };
