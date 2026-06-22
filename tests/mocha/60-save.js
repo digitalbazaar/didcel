@@ -5,7 +5,6 @@ import {
   addEvent, create, createEvent, getPreviousEventHash, loadFromFile,
   loadSecrets, saveSecrets, saveToFile, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
-import {timingSafeEqual} from 'node:crypto';
 import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -81,7 +80,8 @@ describe('save', function() {
 
       expect(loaded.heartbeat).to.be.instanceOf(Buffer);
       expect(loaded.heartbeat).to.have.length(16);
-      expect(timingSafeEqual(loaded.heartbeat, heartbeatSecret)).to.be.true;
+      expect(loaded.heartbeat.toString('hex'))
+        .to.equal(heartbeatSecret.toString('hex'));
     });
 
     it('should save secrets across multiple relationships', async () => {
