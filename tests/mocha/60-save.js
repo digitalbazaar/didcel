@@ -2,8 +2,9 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, create, createEvent, getPreviousEventHash, loadFromFile,
-  loadSecrets, saveSecrets, saveToFile, setHeartbeatFrequency, witness
+  addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
+  hashDidKey, loadFromFile, loadSecrets, saveSecrets, saveToFile,
+  setHeartbeatFrequency, witness
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
@@ -12,6 +13,12 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
 const {expect} = chai;
+
+async function computeHbHash(heartbeatSecret, index) {
+  const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
+  const exported = await kp.export({publicKey: true, includeContext: false});
+  return hashDidKey(`did:key:${exported.publicKeyMultibase}`);
+}
 
 describe('save', function() {
   this.timeout(120000);
@@ -163,15 +170,19 @@ describe('save', function() {
     });
 
     it('should load a multi-event CEL and validate all events', async () => {
-      const {keyPair, didDocument, cryptographicEventLog} = await create();
+      const {heartbeatSecret, didDocument, cryptographicEventLog} =
+        await create();
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+      const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+      const nextHash = await computeHbHash(heartbeatSecret, 1);
 
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
       const {event: hbEvent} = await createEvent({
         type: 'heartbeat',
-        data: undefined,
-        assertionMethod: keyPair,
+        data: {heartbeat: [nextHash]},
+        signer: hbKey0,
         previousEventHash
       });
       await addEvent({cel: cryptographicEventLog, event: hbEvent});
@@ -191,19 +202,25 @@ describe('save', function() {
     });
 
     it('should resolve historical DID state using versionTime', async () => {
-      const {keyPair, didDocument, cryptographicEventLog} = await create();
+      const {heartbeatSecret, didDocument, cryptographicEventLog} =
+        await create();
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
       // capture the witness timestamp of the create entry as the cutoff
       const createWitnessTime =
         cryptographicEventLog.log[0].proof[0].created;
 
+      const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+      const nextHash = await computeHbHash(heartbeatSecret, 1);
+
       // add a heartbeat entry after a small delay
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
       const {event: hbEvent} = await createEvent({
-        type: 'heartbeat', data: undefined,
-        assertionMethod: keyPair, previousEventHash
+        type: 'heartbeat',
+        data: {heartbeat: [nextHash]},
+        signer: hbKey0,
+        previousEventHash
       });
       await addEvent({cel: cryptographicEventLog, event: hbEvent});
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
@@ -232,15 +249,19 @@ describe('save', function() {
     });
 
     it('should detect a heartbeatFrequency violation', async () => {
-      const {keyPair, didDocument, cryptographicEventLog} = await create();
+      const {heartbeatSecret, didDocument, cryptographicEventLog} =
+        await create();
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+      const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+      const nextHash = await computeHbHash(heartbeatSecret, 1);
 
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
       const {event: hbEvent} = await createEvent({
         type: 'heartbeat',
-        data: undefined,
-        assertionMethod: keyPair,
+        data: {heartbeat: [nextHash]},
+        signer: hbKey0,
         previousEventHash
       });
       await addEvent({cel: cryptographicEventLog, event: hbEvent});
@@ -265,18 +286,25 @@ describe('save', function() {
 
     it('should enforce a tightened heartbeatFrequency after update',
       async () => {
-        // entry 0: create with default P3M
-        const {keyPair, didDocument, cryptographicEventLog} = await create();
+        // entry 0: create (hbKey0 active)
+        const {heartbeatSecret, didDocument, cryptographicEventLog} =
+          await create();
         await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-        // entry 1: update heartbeatFrequency to P1D
+        const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+        const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
+        const hbKey1Hash = await computeHbHash(heartbeatSecret, 1);
+        const hbKey2Hash = await computeHbHash(heartbeatSecret, 2);
+
+        // entry 1: update heartbeatFrequency to P1D; rotate hbKey0→hbKey1
         const {didDocument: updatedDoc} =
-        setHeartbeatFrequency({didDocument, heartbeatFrequency: 'P1D'});
+          setHeartbeatFrequency({didDocument, heartbeatFrequency: 'P1D'});
+        updatedDoc.heartbeat = [hbKey1Hash];
         const updateHash =
-        await getPreviousEventHash({cel: cryptographicEventLog});
+          await getPreviousEventHash({cel: cryptographicEventLog});
         const {event: updateEvent} = await createEvent({
           type: 'update', data: updatedDoc,
-          assertionMethod: keyPair, previousEventHash: updateHash
+          signer: hbKey0, previousEventHash: updateHash
         });
         await addEvent({cel: cryptographicEventLog, event: updateEvent});
         await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
@@ -285,8 +313,10 @@ describe('save', function() {
         // to 2 days, which exceeds the new P1D heartbeatFrequency
         const hbHash = await getPreviousEventHash({cel: cryptographicEventLog});
         const {event: hbEvent} = await createEvent({
-          type: 'heartbeat', data: undefined,
-          assertionMethod: keyPair, previousEventHash: hbHash
+          type: 'heartbeat',
+          data: {heartbeat: [hbKey2Hash]},
+          signer: hbKey1,
+          previousEventHash: hbHash
         });
         await addEvent({cel: cryptographicEventLog, event: hbEvent});
         await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
@@ -305,8 +335,8 @@ describe('save', function() {
         saveToFile({filename: celPath, cel: violated});
 
         const {valid, errors} =
-        await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          await loadFromFile(
+            {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
 
         expect(valid).to.be.false;
         expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
@@ -333,27 +363,31 @@ describe('save', function() {
     });
 
     it('should reject any operation after a deactivate event', async () => {
-      const {keyPair, didDocument, cryptographicEventLog} = await create();
+      const {heartbeatSecret, didDocument, cryptographicEventLog} =
+        await create();
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-      // append a deactivate event
+      const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+
+      // append a deactivate event (no rotation needed for deactivate)
       const deactivateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
       const {event: deactivateEvent} = await createEvent({
         type: 'deactivate', data: undefined,
-        assertionMethod: keyPair, previousEventHash: deactivateHash
+        signer: hbKey0, previousEventHash: deactivateHash
       });
       await addEvent({cel: cryptographicEventLog, event: deactivateEvent});
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
-      // force a heartbeat entry directly into the log after deactivate
+      // force a heartbeat entry directly into the log after deactivate,
       // bypassing addEvent's deactivation guard to construct an invalid CEL
       // that read() should reject
       const postDeactivateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
+      const nextHash = await computeHbHash(heartbeatSecret, 1);
       const {event: heartbeatEvent} = await createEvent({
-        type: 'heartbeat', data: undefined,
-        assertionMethod: keyPair, previousEventHash: postDeactivateHash
+        type: 'heartbeat', data: {heartbeat: [nextHash]},
+        signer: hbKey0, previousEventHash: postDeactivateHash
       });
       cryptographicEventLog.log.push({event: heartbeatEvent});
 

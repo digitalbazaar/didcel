@@ -35,7 +35,7 @@ async function runHeartbeat() {
   const {event: hbEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    assertionMethod: hbKeyPair,
+    signer: hbKeyPair,
     previousEventHash
   });
   await addEvent({cel: cryptographicEventLog, event: hbEvent});

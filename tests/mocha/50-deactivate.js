@@ -2,7 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createEvent, getPreviousEventHash, witness
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair, hashDidKey,
+  getPreviousEventHash, witness
 } from '../../lib/index.js';
 import chai from 'chai';
 import {TEST_WITNESSES} from './helpers.js';
@@ -10,21 +11,30 @@ import {TEST_WITNESSES} from './helpers.js';
 const {expect} = chai;
 
 async function runDeactivate() {
-  const {keyPair, didDocument, cryptographicEventLog} = await create();
+  const {heartbeatSecret, didDocument, cryptographicEventLog} = await create();
 
   await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+  const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+  const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
+  const hbKey1Exported =
+    await hbKey1.export({publicKey: true, includeContext: false});
+  const nextHbHash =
+    await hashDidKey(`did:key:${hbKey1Exported.publicKeyMultibase}`);
 
   const {didDocument: updatedDoc} = await addVm({
     didDocument,
     verificationRelationship: 'authentication'
   });
+  // rotate heartbeat key 0→1 in the update data
+  updatedDoc.heartbeat = [nextHbHash];
 
   const updatePreviousHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    assertionMethod: keyPair,
+    signer: hbKey0,
     previousEventHash: updatePreviousHash
   });
   await addEvent({cel: cryptographicEventLog, event: updateEvent});
@@ -36,7 +46,7 @@ async function runDeactivate() {
   const {event: deactivateEvent} = await createEvent({
     type: 'deactivate',
     data: undefined,
-    assertionMethod: keyPair,
+    signer: hbKey1,
     previousEventHash: deactivatePreviousHash
   });
   await addEvent({cel: cryptographicEventLog, event: deactivateEvent});

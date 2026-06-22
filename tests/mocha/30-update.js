@@ -2,29 +2,40 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createEvent, getPreviousEventHash, witness
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair, hashDidKey,
+  getPreviousEventHash, witness
 } from '../../lib/index.js';
 import chai from 'chai';
 import {TEST_WITNESSES} from './helpers.js';
 
 const {expect} = chai;
 
+async function nextHeartbeatHash(heartbeatSecret, index) {
+  const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
+  const exported = await kp.export({publicKey: true, includeContext: false});
+  return hashDidKey(`did:key:${exported.publicKeyMultibase}`);
+}
+
 async function runUpdate() {
-  const {keyPair, didDocument, cryptographicEventLog} = await create();
+  const {heartbeatSecret, didDocument, cryptographicEventLog} = await create();
 
   await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+
+  const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
 
   const {didDocument: updatedDoc} = await addVm({
     didDocument,
     verificationRelationship: 'authentication'
   });
+  // rotation is required for every non-deactivate event
+  updatedDoc.heartbeat = [await nextHeartbeatHash(heartbeatSecret, 1)];
 
   const previousEventHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    assertionMethod: keyPair,
+    signer: hbKey0,
     previousEventHash
   });
   await addEvent({cel: cryptographicEventLog, event: updateEvent});
@@ -77,9 +88,12 @@ describe('update', function() {
 
   it('should throw MALFORMED_CEL_ERROR when adding an event to an empty log',
     async () => {
-      const {keyPair, didDocument} = await create();
+      const {heartbeatSecret, didDocument} = await create();
+      const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+      const updatedDoc = structuredClone(didDocument);
+      updatedDoc.heartbeat = [await nextHeartbeatHash(heartbeatSecret, 1)];
       const {event: updateEvent} = await createEvent({
-        type: 'update', data: didDocument, assertionMethod: keyPair,
+        type: 'update', data: updatedDoc, signer: hbKey0,
         previousEventHash: undefined
       });
 
