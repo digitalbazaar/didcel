@@ -45,10 +45,10 @@ import {
 
 ---
 
-### `create([options])` -> `{keyPair, recoveryKeyPair, didDocument, cryptographicEventLog}`
+### `create([options])` -> `{keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog}`
 
 Creates a new `did:cel` DID document with a self-certifying identifier, an
-initial assertion method key pair, a recovery key pair, and an initial signed
+initial assertion method key pair, a heartbeat key pair, and an initial signed
 create event already wrapped in a Cryptographic Event Log.
 
 | Parameter | Type | Description |
@@ -57,7 +57,7 @@ create event already wrapped in a Cryptographic Event Log.
 | `options.heartbeatFrequency` | string | ISO 8601 duration for the required heartbeat interval. Default: `'P10Y'`. |
 
 ```js
-const {keyPair, recoveryKeyPair, didDocument, cryptographicEventLog} =
+const {keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog} =
   await create();
 
 console.log(didDocument.id); // did:cel:z...
@@ -97,7 +97,7 @@ as `previousEventHash` so the hash is covered by the operation proof.
 |-----------|------|-------------|
 | `type` | string | Event type: `'update'`, `'heartbeat'`, or `'deactivate'`. |
 | `data` | object\|undefined | The DID document for update events; `undefined` for heartbeat and deactivate. |
-| `assertionMethod` | KeyPair | The key pair to sign with (from `assertionMethod` in the DID document, or the recovery key pair). |
+| `assertionMethod` | KeyPair | The key pair to sign with (from `assertionMethod` in the DID document, or the heartbeat key pair). |
 | `previousEventHash` | string | Base58btc SHA3-256 hash of the previous event from `getPreviousEventHash()`. |
 
 ```js
@@ -182,10 +182,10 @@ const {didDocument: updatedDoc} = setHeartbeatFrequency({
 ### `hashDidKey(didKey)` -> `Promise<string>`
 
 Computes the base58btc-encoded SHA3-256 multihash of a `did:key` URI. This is
-the value stored in the `recovery` array of a DID document.
+the value stored in the `heartbeat` array of a DID document.
 
 ```js
-const recoveryHash = await hashDidKey('did:key:z...');
+const heartbeatHash = await hashDidKey('did:key:z...');
 ```
 
 ---
@@ -209,7 +209,7 @@ Loads a gzip-compressed CEL file and fully validates it:
 - Operation proof signatures (ecdsa-jcs-2019)
 - Witness proof signatures (blind-witness scheme)
 - Timestamp deviation between operation and witness proofs (<= 5 min)
-- Recovery key rotation rules
+- Heartbeat key rotation rules
 - Heartbeat frequency compliance
 
 | Parameter | Type | Description |
@@ -298,7 +298,7 @@ const SECRETS_DIR = './secrets';
 const PASSWORD = process.env.DID_PASSWORD;
 
 // 1. Create a new DID (returns CEL pre-loaded with the create event)
-const {keyPair, recoveryKeyPair, didDocument, cryptographicEventLog} =
+const {keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog} =
   await create();
 
 // 2. Witness the create event
@@ -365,8 +365,8 @@ The library implements the `did:cel` DID method, which consists of:
 - **Blind witness attestations:** Witness services receive only a SHA3-256 hash
   of each event and return `DataIntegrityProof` attestations, providing temporal
   anchoring and distributed trust without learning DID document contents.
-- **Recovery keys:** Each DID document stores SHA3-256 hashes of recovery
-  `did:key:` URIs. A recovery operation signs an update with the recovery key
+- **Heartbeat keys:** Each DID document stores SHA3-256 hashes of heartbeat
+  `did:key:` URIs. A heartbeat operation signs an update with the heartbeat key
   and must rotate out the used hash, replacing it with a new one.
 - **Encrypted secret storage:** Private keys encrypted with AES-256-GCM using a
   scrypt-derived key and stored in YAML format.
@@ -390,8 +390,8 @@ The library implements the `did:cel` DID method, which consists of:
   private information about DID controllers.
 - **CEL Files:** Saved CEL files contain only public information (DID documents
   and proofs), not private keys.
-- **Recovery Keys:** Recovery key hashes are stored in the DID document. A
-  recovery operation requires proving possession of a recovery key and rotating
+- **Heartbeat Keys:** Heartbeat key hashes are stored in the DID document. A
+  heartbeat operation requires proving possession of a heartbeat key and rotating
   its hash out of the document to prevent replay attacks.
 
 ## License

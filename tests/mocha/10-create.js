@@ -30,10 +30,10 @@ describe('create', function() {
     expect(assertionKey.controller).to.equal(didDocument.id);
     expect(assertionKey.publicKeyMultibase).to.be.a('string').that.is.not.empty;
 
-    // recovery: one base58btc-encoded SHA3-256 multihash of a did:key URI
-    expect(didDocument.recovery).to.be.an('array').with.length(1);
-    const recoveryHash = didDocument.recovery[0];
-    expect(recoveryHash).to.be.a('string').that.matches(/^z/);
+    // heartbeat: one base58btc-encoded SHA3-256 multihash of a did:key URI
+    expect(didDocument.heartbeat).to.be.an('array').with.length(1);
+    const heartbeatHash = didDocument.heartbeat[0];
+    expect(heartbeatHash).to.be.a('string').that.matches(/^z/);
 
     // service: must be an array of service objects (DID Core conformant)
     expect(didDocument.service).to.be.an('array').with.length.at.least(1);
