@@ -1,29 +1,19 @@
 # didcel
 
-A JavaScript library for creating and managing Decentralized Identifiers (DIDs)
-using the Cryptographic Event Log (CEL) method. This library provides functions
-for working with `did:cel` identifiers, which use a witness-based architecture
-to maintain a cryptographically verifiable history of DID document operations.
-
-The `did:cel` method is a fully decentralized DID method that doesn't depend on
-blockchains, centralized registries, or any single point of control. Instead, it
-uses cryptographic event logs with independent witness attestations to create
-tamper-evident audit trails for DID operations.
+JavaScript library for creating and managing Decentralized Identifiers (DIDs)
+using the `did:cel` method. DIDs are secured by a Cryptographic Event Log (CEL)
+— a hash-linked chain of witnessed events — with no dependency on blockchains or
+centralized registries.
 
 ## Installation
-
-### Prerequisites
-
-- Node.js v24 or higher
-- npm (comes with Node.js)
-
-### Install Dependencies
 
 ```bash
 npm install
 ```
 
-## Library API
+Requires Node.js v24+.
+
+## API
 
 All public functions are exported from the package entry point:
 
@@ -33,7 +23,7 @@ import {
   create, addVm, createEvent, deriveHeartbeatKeyPair,
   hashDidKey, setHeartbeatFrequency,
   // CEL operations
-  createCel, addEvent, getPreviousEventHash, witness,
+  addEvent, getPreviousEventHash, witness,
   read, loadFromFile, saveToFile,
   // Secret key storage
   saveSecrets, loadSecrets,
@@ -46,36 +36,149 @@ import {
 
 ---
 
-### `create([options])` -> `{keyPair, heartbeatSecret, didDocument, cryptographicEventLog}`
+### `create([options])` → `{keyPair, heartbeatSecret, didDocument, cryptographicEventLog}`
 
-Creates a new `did:cel` DID document with a self-certifying identifier, an
-initial assertion method key pair, a 128-bit heartbeat master secret, and an
-initial signed create event already wrapped in a Cryptographic Event Log.
+Creates a new `did:cel` DID. Returns the assertion method key pair, a 16-byte
+heartbeat master secret, the signed DID document, and a CEL pre-loaded with the
+create event.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `options.curve` | string | Elliptic curve for key generation. Default: `'P-256'`. |
-| `options.heartbeatFrequency` | string | ISO 8601 duration for the required heartbeat interval. Default: `'P10Y'`. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.curve` | string | `'P-256'` | Elliptic curve for key generation. |
+| `options.heartbeatFrequency` | string | `'P1M'` | Required heartbeat interval (ISO 8601 duration). |
 
 ```js
 const {keyPair, heartbeatSecret, didDocument, cryptographicEventLog} =
   await create();
-
-console.log(didDocument.id); // did:cel:z...
+// didDocument.id === 'did:cel:z...'
 ```
 
 ---
 
-### `addVm({didDocument, verificationRelationship, [curve]})` -> `{keyPair, didDocument}`
+### `deriveHeartbeatKeyPair(masterSecret, index)` → `Promise<KeyPair>`
 
-Generates a new key pair and adds it as a verification method to the specified
-relationship in the DID document. Removes the existing proof since the document
-must be re-signed with `createEvent` before appending an update event.
+Derives the heartbeat key pair at a given index from the master secret returned
+by `create()`. The key at index 0 corresponds to the hash already in
+`didDocument.heartbeat`. Every CEL operation (except deactivate) must be signed
+with the currently active heartbeat key and must rotate to the next key.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `masterSecret` | Buffer | 16-byte heartbeat master secret from `create()`. |
+| `index` | number | Key index. Start at 0; increment after each rotation. |
+
+```js
+const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
+```
+
+---
+
+### `hashDidKey(didKey)` → `Promise<string>`
+
+Converts a `did:key:` URI to the base58btc multibase hash stored in
+`didDocument.heartbeat`.
+
+```js
+const exported = await hbKey1.export({publicKey: true, includeContext: false});
+const nextHash = await hashDidKey(`did:key:${exported.publicKeyMultibase}`);
+```
+
+---
+
+### `createEvent({type, data, signer, previousEventHash})` → `Promise<{event}>`
+
+Creates and signs a CEL event. All events must be signed by the **currently
+active heartbeat key** (from `deriveHeartbeatKeyPair`). Every event except
+`deactivate` must rotate the heartbeat key by including the next heartbeat hash
+in `data`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `type` | string | `'update'`, `'heartbeat'`, or `'deactivate'`. |
+| `data` | object\|undefined | DID document for `update`; `{heartbeat: ["<next_hash>"]}` for `heartbeat`; `undefined` for `deactivate`. |
+| `signer` | KeyPair | The active heartbeat key pair. |
+| `previousEventHash` | string | Hash of the previous event from `getPreviousEventHash()`. |
+
+```js
+// update: full DID document with rotated heartbeat hash
+const {event: updateEvent} = await createEvent({
+  type: 'update',
+  data: {...updatedDoc, heartbeat: [nextHash]},
+  signer: hbKey0,
+  previousEventHash
+});
+
+// heartbeat: partial object with only the new heartbeat hash
+const {event: hbEvent} = await createEvent({
+  type: 'heartbeat',
+  data: {heartbeat: [nextHash]},
+  signer: hbKey0,
+  previousEventHash
+});
+
+// deactivate: no data, no rotation needed
+const {event: deactivateEvent} = await createEvent({
+  type: 'deactivate',
+  signer: hbKey0,
+  previousEventHash
+});
+```
+
+---
+
+### `getPreviousEventHash({cel})` → `Promise<string>`
+
+Returns the hash of the most recent event in the CEL. Call this before
+`createEvent()` and pass the result as `previousEventHash` so the hash is
+covered by the operation proof.
+
+```js
+const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
+```
+
+---
+
+### `addEvent({cel, event})` → `Promise<cel>`
+
+Appends a pre-signed event to the CEL. Throws `MALFORMED_CEL_ERROR` if the log
+is empty or already deactivated.
+
+```js
+await addEvent({cel: cryptographicEventLog, event});
+```
+
+---
+
+### `witness({cel, witnesses})` → `Promise<Array>`
+
+Obtains witness attestations for the most recent event. Call after every
+`addEvent()`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `cel` | object | The CEL. |
+| `witnesses` | string[] | Witness service URLs. |
+
+```js
+await witness({
+  cel: cryptographicEventLog,
+  witnesses: ['https://witness.example/witnesses/v1']
+});
+```
+
+---
+
+### `addVm({didDocument, verificationRelationship, [curve]})` → `{keyPair, didDocument}`
+
+Generates a new key pair and adds it to the specified verification relationship.
+The returned document has its proof removed and must be re-signed via
+`createEvent` before appending to the CEL.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `didDocument` | object | The current DID document. |
-| `verificationRelationship` | string | One of `'authentication'`, `'assertionMethod'`, `'capabilityInvocation'`, `'capabilityDelegation'`, `'keyAgreement'`. |
+| `verificationRelationship` | string | `'authentication'`, `'assertionMethod'`, `'capabilityInvocation'`, `'capabilityDelegation'`, or `'keyAgreement'`. |
 | `curve` | string | Elliptic curve. Default: `'P-256'`. |
 
 ```js
@@ -87,133 +190,23 @@ const {keyPair: authKeyPair, didDocument: updatedDoc} = await addVm({
 
 ---
 
-### `createEvent({type, data, assertionMethod, previousEventHash})` -> `Promise<{event}>`
+### `setHeartbeatFrequency({didDocument, heartbeatFrequency})` → `{didDocument}`
 
-Creates a signed event of the given type using the provided assertion method key.
-Use this for `'update'`, `'heartbeat'`, and `'deactivate'` events after the
-initial create. Always call `getPreviousEventHash()` first and pass the result
-as `previousEventHash` so the hash is covered by the operation proof.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `type` | string | Event type: `'update'`, `'heartbeat'`, or `'deactivate'`. |
-| `data` | object\|undefined | The DID document for update events; `undefined` for heartbeat and deactivate. |
-| `assertionMethod` | KeyPair | The key pair to sign with (from `assertionMethod` in the DID document, or the heartbeat key pair). |
-| `previousEventHash` | string | Base58btc SHA3-256 hash of the previous event from `getPreviousEventHash()`. |
-
-```js
-const previousEventHash =
-  await getPreviousEventHash({cel: cryptographicEventLog});
-const {event} = await createEvent({
-  type: 'update',
-  data: updatedDidDocument,
-  assertionMethod: keyPair,
-  previousEventHash
-});
-```
-
----
-
-### `getPreviousEventHash({cel})` -> `Promise<string|undefined>`
-
-Computes the SHA3-256 multibase hash of the most recent event in a CEL. Pass
-the result as `previousEventHash` to `createEvent` before signing, so the
-hash chain is covered by the operation proof.
-
-```js
-const previousEventHash = await getPreviousEventHash({cel: cryptographicEventLog});
-```
-
----
-
-### `addEvent({cel, event})` -> `Promise<cel>`
-
-Appends a pre-signed event to the CEL. The event must already contain a
-`previousEventHash` (set before signing via `getPreviousEventHash`) so the
-hash is included in the operation proof. Call `witness()` after appending
-to obtain attestations.
-
-```js
-await addEvent({cel: cryptographicEventLog, event});
-```
-
----
-
-### `witness({cel, witnesses})` -> `Promise<Array>`
-
-Obtains cryptographic attestations from witness services for the most recent
-event in the CEL. Each witness receives only a SHA3-256 hash of the event
-(blind witness - they never see the DID document) and returns a
-`DataIntegrityProof` that provides temporal anchoring and distributed trust.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `cel` | object | The Cryptographic Event Log. |
-| `witnesses` | string[] | Array of witness service URLs. |
-
-```js
-await witness({
-  cel: cryptographicEventLog,
-  witnesses: ['https://witness.example/witnesses/v1']
-});
-```
-
----
-
-### `setHeartbeatFrequency({didDocument, heartbeatFrequency})` -> `{didDocument}`
-
-Updates the `heartbeatFrequency` field on a DID document and removes the proof.
-The document must be re-signed with `createEvent` before appending an update
-event.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `didDocument` | object | The current DID document. |
-| `heartbeatFrequency` | string | ISO 8601 duration (e.g. `'P3M'`, `'P1Y'`). |
+Updates `heartbeatFrequency` on a DID document and removes the proof. The
+document must be re-signed via `createEvent` before appending to the CEL.
 
 ```js
 const {didDocument: updatedDoc} = setHeartbeatFrequency({
   didDocument,
-  heartbeatFrequency: 'P3M'
+  heartbeatFrequency: 'P1W'
 });
-```
-
----
-
-### `deriveHeartbeatKeyPair(masterSecret, index)` -> `Promise<KeyPair>`
-
-Derives an ECDSA P-256 Multikey key pair from a heartbeat master secret and an
-event index using HKDF-SHA256. The key pair at index 0 is the one whose hash
-is embedded in the DID document at creation time. Use index `i` when signing
-the i-th heartbeat update (after `i` prior heartbeat rotations have occurred).
-The returned key pair has `id` and `controller` set to its `did:key:` URI and
-is ready to pass directly to `createEvent()` as `assertionMethod`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `masterSecret` | Buffer | 16-byte heartbeat master secret from `create()`. |
-| `index` | number | Non-negative integer heartbeat key index. |
-
-```js
-const hbKeyPair = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
-```
-
----
-
-### `hashDidKey(didKey)` -> `Promise<string>`
-
-Computes the base58btc-encoded SHA3-256 multihash of a `did:key` URI. This is
-the value stored in the `heartbeat` array of a DID document.
-
-```js
-const heartbeatHash = await hashDidKey('did:key:z...');
 ```
 
 ---
 
 ### `saveToFile({filename, cel})`
 
-Saves a CEL to a gzip-compressed JSON file.
+Saves a CEL to a gzip-compressed file.
 
 ```js
 saveToFile({filename: './logs/my-did.cel', cel: cryptographicEventLog});
@@ -221,85 +214,92 @@ saveToFile({filename: './logs/my-did.cel', cel: cryptographicEventLog});
 
 ---
 
-### `loadFromFile({filename, [trustedWitnesses], [versionTime]})` -> `Promise<{cel, valid, errors, didDocument}>`
+### `loadFromFile({filename, [trustedWitnesses], [versionTime]})` → `Promise<{cel, valid, errors, didDocument}>`
 
-Loads a gzip-compressed CEL file and fully validates it:
-
-- Self-certifying DID identifier integrity
-- Hash chain integrity (`previousEventHash` on each non-create entry)
-- Operation proof signatures (ecdsa-jcs-2019)
-- Witness proof signatures (blind-witness scheme)
-- Timestamp deviation between operation and witness proofs (<= 5 min)
-- Heartbeat key rotation rules
-- Heartbeat frequency compliance
+Loads and validates a CEL file. Returns `valid: false` and a non-empty `errors`
+array if any check fails (identifier integrity, hash chain, operation and witness
+proof signatures, timestamp deviation, heartbeat rotation, heartbeat frequency).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `filename` | string | Path to the `.cel` file. |
-| `trustedWitnesses` | Array | Optional. Each entry: `{id, validFrom, validUntil}`. Only proofs from listed witnesses within their validity window are verified. |
-| `versionTime` | string | Optional ISO datetime. When set, entries whose earliest trusted witness timestamp exceeds this time are excluded, enabling historical DID resolution. |
-
-Returns `{cel, valid, errors, didDocument}` where `valid` is `false` and
-`errors` is non-empty if any check fails.
+| `trustedWitnesses` | `{id, validFrom, validUntil}[]` | Witnesses to verify. Only proofs from listed witnesses within their validity window are checked. |
+| `versionTime` | string | ISO datetime for historical DID resolution. Entries witnessed after this time are excluded. |
 
 ```js
-const trustedWitnesses = [{
-  id: 'did:key:z...',
-  validFrom: '2024-01-01T00:00:00Z',
-  validUntil: '2099-01-01T00:00:00Z'
-}];
 const {valid, errors, didDocument} = await loadFromFile({
   filename: './logs/my-did.cel',
-  trustedWitnesses
+  trustedWitnesses: [{
+    id: 'did:key:z...',
+    validFrom: '2024-01-01T00:00:00Z',
+    validUntil: '2099-01-01T00:00:00Z'
+  }]
 });
-if(!valid) {
-  console.error('CEL validation failed:', errors);
-}
 ```
 
 ---
 
-### `read({cel, [trustedWitnesses], [versionTime]})` -> `Promise<{cel, valid, errors, didDocument}>`
+### `read({cel, [trustedWitnesses], [versionTime]})` → `Promise<{cel, valid, errors, didDocument}>`
 
-Same validation as `loadFromFile` but operates on an already-parsed CEL object
-instead of reading from disk. Accepts the same `trustedWitnesses` and
-`versionTime` options.
+Same as `loadFromFile` but accepts an already-parsed CEL object.
 
 ---
 
 ### `saveSecrets({didIdentifier, secretKeys, password, secretsDir})`
 
-Encrypts all private keys with AES-256-GCM (key derived via scrypt) and saves
-them to `{secretsDir}/{didIdentifier}.yaml`.
+Encrypts private keys with AES-256-GCM and saves them to
+`{secretsDir}/{didIdentifier}.yaml`.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `didIdentifier` | string | Method-specific ID (the part after `did:cel:`). |
-| `secretKeys` | object | Keys organized by verification relationship, each an array of key pair objects. |
-| `password` | string | Password used to encrypt each private key. |
-| `secretsDir` | string | Directory path to write the secrets file. |
+| `didIdentifier` | string | The method-specific ID (everything after `did:cel:`). |
+| `secretKeys` | object | Keys by relationship. Verification relationships hold arrays of key pairs; `heartbeat` holds the 16-byte master secret Buffer. |
+| `password` | string | Encryption password. |
+| `secretsDir` | string | Directory to write into. |
 
 ```js
-const secretKeys = {
-  assertionMethod: [keyPair],
-  authentication: [],
-  capabilityInvocation: [],
-  capabilityDelegation: [],
-  keyAgreement: []
-};
-await saveSecrets({didIdentifier, secretKeys, password, secretsDir});
+await saveSecrets({
+  didIdentifier,
+  secretKeys: {
+    assertionMethod: [keyPair],
+    authentication: [],
+    capabilityInvocation: [],
+    capabilityDelegation: [],
+    keyAgreement: [],
+    heartbeat: heartbeatSecret
+  },
+  password,
+  secretsDir
+});
 ```
 
 ---
 
-### `loadSecrets({didIdentifier, password, secretsDir})` -> `Promise<secretKeys>`
+### `loadSecrets({didIdentifier, password, secretsDir})` → `Promise<secretKeys>`
 
-Loads and decrypts private keys from `{secretsDir}/{didIdentifier}.yaml`,
-returning a `secretKeys` object keyed by verification relationship.
+Decrypts and returns private keys. `secretKeys.heartbeat` is a 16-byte Buffer
+(the master secret); each other field is an array of key pair objects.
 
 ```js
 const secretKeys = await loadSecrets({didIdentifier, password, secretsDir});
-const signingKey = secretKeys.assertionMethod[0];
+const hbKey = await deriveHeartbeatKeyPair(secretKeys.heartbeat, currentIndex);
+```
+
+---
+
+## Heartbeat Key Rotation
+
+Every event signed after `create` uses the **heartbeat key** derived at the
+current rotation index. Each event (except `deactivate`) must advance the index
+by including the hash of the *next* key in the event data, and must not reuse a
+key whose hash is still in `didDocument.heartbeat`.
+
+```
+index 0 → signs create  (hash of key 0 placed in didDocument.heartbeat at create time)
+index 0 → signs event 1 (data includes hash of key 1; hash of key 0 is removed)
+index 1 → signs event 2 (data includes hash of key 2; hash of key 1 is removed)
+...
+index N → signs deactivate (no rotation needed)
 ```
 
 ---
@@ -309,8 +309,9 @@ const signingKey = secretKeys.assertionMethod[0];
 ```js
 import {join} from 'node:path';
 import {
-  addEvent, addVm, create, createEvent, getPreviousEventHash,
-  loadFromFile, loadSecrets, saveSecrets, saveToFile, witness
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
+  getPreviousEventHash, hashDidKey, loadFromFile, loadSecrets,
+  saveSecrets, saveToFile, witness
 } from 'didcel';
 
 const WITNESSES = ['https://witness.example/witnesses/v1'];
@@ -318,117 +319,95 @@ const LOGS_DIR = './logs';
 const SECRETS_DIR = './secrets';
 const PASSWORD = process.env.DID_PASSWORD;
 
-// 1. Create a new DID (returns CEL pre-loaded with the create event)
+// Helper: compute hash of heartbeat key at given index
+async function hbHash(secret, index) {
+  const kp = await deriveHeartbeatKeyPair(secret, index);
+  const exp = await kp.export({publicKey: true, includeContext: false});
+  return hashDidKey(`did:key:${exp.publicKeyMultibase}`);
+}
+
+// 1. Create a new DID
 const {keyPair, heartbeatSecret, didDocument, cryptographicEventLog} =
   await create();
-
-// 2. Witness the create event
 await witness({cel: cryptographicEventLog, witnesses: WITNESSES});
 
-// 3. Add an authentication key
-const {keyPair: authKeyPair, didDocument: updatedDoc} = await addVm({
-  didDocument,
-  verificationRelationship: 'authentication'
-});
+// 2. Update: add authentication key, rotate heartbeat key 0 → 1
+const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
+const {didDocument: updatedDoc} =
+  await addVm({didDocument, verificationRelationship: 'authentication'});
+updatedDoc.heartbeat = [await hbHash(heartbeatSecret, 1)];
 
-// 4. Sign and append an update event
-const previousEventHash =
-  await getPreviousEventHash({cel: cryptographicEventLog});
 const {event: updateEvent} = await createEvent({
   type: 'update',
   data: updatedDoc,
-  assertionMethod: keyPair,
-  previousEventHash
+  signer: hbKey0,
+  previousEventHash: await getPreviousEventHash({cel: cryptographicEventLog})
 });
 await addEvent({cel: cryptographicEventLog, event: updateEvent});
 await witness({cel: cryptographicEventLog, witnesses: WITNESSES});
 
-// 5. Save the CEL and encrypted secrets
+// 3. Save the CEL and encrypted secrets
 const didIdentifier = didDocument.id.replace('did:cel:', '');
 saveToFile({
   filename: join(LOGS_DIR, `${didIdentifier}.cel`),
   cel: cryptographicEventLog
 });
-
-const secretKeys = {
-  assertionMethod: [keyPair],
-  authentication: [authKeyPair],
-  capabilityInvocation: [],
-  capabilityDelegation: [],
-  keyAgreement: [],
-  heartbeat: heartbeatSecret
-};
-await saveSecrets({didIdentifier, secretKeys, password: PASSWORD, secretsDir: SECRETS_DIR});
-
-// 6. Later: load and verify the CEL
-const trustedWitnesses = [{
-  id: 'did:key:z...',  // the witness's DID
-  validFrom: '2024-01-01T00:00:00Z',
-  validUntil: '2099-01-01T00:00:00Z'
-}];
-const {valid, errors} = await loadFromFile({
-  filename: join(LOGS_DIR, `${didIdentifier}.cel`),
-  trustedWitnesses
+await saveSecrets({
+  didIdentifier,
+  secretKeys: {
+    assertionMethod: [keyPair],
+    authentication: [],
+    capabilityInvocation: [],
+    capabilityDelegation: [],
+    keyAgreement: [],
+    heartbeat: heartbeatSecret
+  },
+  password: PASSWORD,
+  secretsDir: SECRETS_DIR
 });
-console.log('CEL valid:', valid, errors);
+
+// 4. Later: load and verify
+const {valid, errors, didDocument: resolved} = await loadFromFile({
+  filename: join(LOGS_DIR, `${didIdentifier}.cel`),
+  trustedWitnesses: [{
+    id: 'did:key:z...',
+    validFrom: '2024-01-01T00:00:00Z',
+    validUntil: '2099-01-01T00:00:00Z'
+  }]
+});
 ```
+
+---
 
 ## Architecture
 
-The library implements the `did:cel` DID method, which consists of:
-
-- **Self-certifying identifiers:** DID identifiers derived from a SHA3-256 hash
-  of the canonicalized initial DID document (without `id` or `controller`
-  fields), encoded as `did:cel:` + base58btc multibase.
-- **Cryptographic Event Log (CEL):** A hash-linked chain of events recording all
-  DID operations (`create`, `update`, `heartbeat`, `deactivate`), each signed
-  with ecdsa-jcs-2019. Non-create events include a `previousEventHash` that
-  is set before signing so the hash chain is covered by the operation proof.
-- **Blind witness attestations:** Witness services receive only a SHA3-256 hash
-  of each event and return `DataIntegrityProof` attestations, providing temporal
-  anchoring and distributed trust without learning DID document contents.
-- **Heartbeat keys:** Each DID document stores SHA3-256 hashes of heartbeat
-  `did:key:` URIs. A heartbeat operation signs an update with the heartbeat key
-  (derived via `deriveHeartbeatKeyPair(masterSecret, index)`) and must rotate
-  out the used hash, replacing it with the hash of the next derived key. Only
-  the 16-byte master secret is stored; individual keys are derived on demand.
-- **Encrypted secret storage:** Private keys encrypted with AES-256-GCM using a
-  scrypt-derived key and stored in YAML format.
+- **Self-certifying identifiers:** The DID is derived from a hash of the initial
+  DID document, so its integrity can be verified without any external registry.
+- **Cryptographic Event Log (CEL):** Each operation (`create`, `update`,
+  `heartbeat`, `deactivate`) is signed with the active heartbeat key and
+  hash-linked to the previous event. Non-create events carry a `previousEventHash`
+  that is set before signing, so the hash chain is covered by the proof.
+- **Blind witnesses:** Witnesses receive only a hash of each event, never the DID
+  document, and return a `DataIntegrityProof` for temporal anchoring.
+- **Heartbeat keys:** A 16-byte master secret is stored; individual keys are
+  derived on demand. Each key is one-time-use — its hash is rotated out of
+  `didDocument.heartbeat` when it signs an event. The `deactivate` event is the
+  only exception: no rotation is required.
+- **Encrypted secrets:** Private keys are encrypted with AES-256-GCM (scrypt key
+  derivation) and stored as YAML.
 
 ## File Structure
 
-- `lib/index.js` - Package entry point; explicit named exports for all public functions
-- `lib/didcel.js` - DID document operations: `create`, `addVm`, `createEvent`, `setHeartbeatFrequency`, `hashDidKey`
-- `lib/cel.js` - Cryptographic Event Log: `createCel`, `addEvent`, `getPreviousEventHash`, `witness`, `read`, `loadFromFile`, `saveToFile`
-- `lib/secrets.js` - Encrypted key storage: `saveSecrets`, `loadSecrets`
-- `lib/witness.js` - HTTP client for witness services
-- `lib/utils.js` - JSON-LD key ordering and suffix-based lookup utilities
-- `lib/validate.js` - AJV JSON Schema validation for DID documents and CELs
-
-## Security Considerations
-
-- **Secret Keys:** Private keys are held in memory as key pair objects. Call
-  `saveSecrets` to persist them encrypted to disk; they are lost otherwise.
-- **Blind Witnesses:** Witness services never see the DID document - they only
-  sign a SHA3-256 hash of the event. This prevents witnesses from learning
-  private information about DID controllers.
-- **CEL Files:** Saved CEL files contain only public information (DID documents
-  and proofs), not private keys.
-- **Heartbeat Keys:** Heartbeat key hashes are stored in the DID document. A
-  heartbeat operation requires proving possession of a heartbeat key and rotating
-  its hash out of the document to prevent replay attacks.
+| File | Contents |
+|------|----------|
+| `lib/index.js` | Package entry point; all public exports |
+| `lib/didcel.js` | `create`, `addVm`, `createEvent`, `setHeartbeatFrequency`, `hashDidKey`, `deriveHeartbeatKeyPair` |
+| `lib/cel.js` | `addEvent`, `getPreviousEventHash`, `witness`, `read`, `loadFromFile`, `saveToFile` |
+| `lib/secrets.js` | `saveSecrets`, `loadSecrets` |
+| `lib/witness.js` | HTTP client for witness services |
+| `lib/utils.js` | JSON-LD key ordering; suffix-based document lookup utilities |
+| `lib/validate.js` | AJV JSON Schema validation for DID documents and CELs |
 
 ## License
 
 BSD-3-Clause
-
-## Contributing
-
-This is an experimental implementation of the `did:cel` DID method. Contributions
-and feedback are welcome.
-
-## Related Specifications
-
-- [DID CEL Specification](https://w3c-ccg.github.io/did-cel-spec/) - Technical specification for the `did:cel` method
-- [W3C Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/) - Core DID specification
-- [Verifiable Credential Data Integrity](https://www.w3.org/TR/vc-data-integrity/) - Data Integrity Proofs specification
