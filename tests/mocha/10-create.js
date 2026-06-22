@@ -10,7 +10,7 @@ describe('create', function() {
   this.timeout(30000);
 
   it('should create a well-formed DID document', async () => {
-    const {didDocument, cryptographicEventLog} = await create();
+    const {didDocument, cryptographicEventLog, heartbeatSecret} = await create();
 
     // identifier
     expect(didDocument.id).to.match(/^did:cel:z/);
@@ -34,6 +34,10 @@ describe('create', function() {
     expect(didDocument.heartbeat).to.be.an('array').with.length(1);
     const heartbeatHash = didDocument.heartbeat[0];
     expect(heartbeatHash).to.be.a('string').that.matches(/^z/);
+
+    // heartbeatSecret: 16-byte KDF master secret returned to caller for storage
+    expect(Buffer.isBuffer(heartbeatSecret)).to.be.true;
+    expect(heartbeatSecret).to.have.length(16);
 
     // service: must be an array of service objects (DID Core conformant)
     expect(didDocument.service).to.be.an('array').with.length.at.least(1);

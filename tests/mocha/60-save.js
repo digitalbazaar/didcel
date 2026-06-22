@@ -5,6 +5,7 @@ import {
   addEvent, create, createEvent, getPreviousEventHash, loadFromFile,
   loadSecrets, saveSecrets, saveToFile, setHeartbeatFrequency, witness
 } from '../../lib/index.js';
+import {timingSafeEqual} from 'node:crypto';
 import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
@@ -33,14 +34,15 @@ describe('save', function() {
 
   describe('saveSecrets / loadSecrets', function() {
     it('should save and load secrets with the correct key pairs', async () => {
-      const {keyPair, didDocument} = await create();
+      const {keyPair, heartbeatSecret, didDocument} = await create();
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [],
         assertionMethod: [keyPair],
         capabilityInvocation: [],
         capabilityDelegation: [],
-        keyAgreement: []
+        keyAgreement: [],
+        heartbeat: heartbeatSecret
       };
 
       await saveSecrets(
@@ -59,8 +61,31 @@ describe('save', function() {
         .to.equal(exportedOriginal.publicKeyMultibase);
     });
 
+    it('should save and load the heartbeat master secret', async () => {
+      const {keyPair, heartbeatSecret, didDocument} = await create();
+      const didIdentifier = didDocument.id.replace('did:cel:', '');
+      const secretKeys = {
+        authentication: [],
+        assertionMethod: [keyPair],
+        capabilityInvocation: [],
+        capabilityDelegation: [],
+        keyAgreement: [],
+        heartbeat: heartbeatSecret
+      };
+
+      await saveSecrets(
+        {didIdentifier, secretKeys, password: TEST_PASSWORD, secretsDir});
+
+      const loaded = await loadSecrets(
+        {didIdentifier, password: TEST_PASSWORD, secretsDir});
+
+      expect(loaded.heartbeat).to.be.instanceOf(Buffer);
+      expect(loaded.heartbeat).to.have.length(16);
+      expect(timingSafeEqual(loaded.heartbeat, heartbeatSecret)).to.be.true;
+    });
+
     it('should save secrets across multiple relationships', async () => {
-      const {keyPair, didDocument} = await create();
+      const {keyPair, heartbeatSecret, didDocument} = await create();
       const {keyPair: authKeyPair} = await create();
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
@@ -68,7 +93,8 @@ describe('save', function() {
         assertionMethod: [keyPair],
         capabilityInvocation: [],
         capabilityDelegation: [],
-        keyAgreement: []
+        keyAgreement: [],
+        heartbeat: heartbeatSecret
       };
 
       await saveSecrets(
@@ -82,14 +108,15 @@ describe('save', function() {
     });
 
     it('should fail to load secrets with wrong password', async () => {
-      const {keyPair, didDocument} = await create();
+      const {keyPair, heartbeatSecret, didDocument} = await create();
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [],
         assertionMethod: [keyPair],
         capabilityInvocation: [],
         capabilityDelegation: [],
-        keyAgreement: []
+        keyAgreement: [],
+        heartbeat: heartbeatSecret
       };
 
       await saveSecrets(

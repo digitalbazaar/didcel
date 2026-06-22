@@ -30,7 +30,8 @@ All public functions are exported from the package entry point:
 ```js
 import {
   // DID document operations
-  create, addVm, createEvent, hashDidKey, setHeartbeatFrequency,
+  create, addVm, createEvent, deriveHeartbeatKeyPair,
+  hashDidKey, setHeartbeatFrequency,
   // CEL operations
   createCel, addEvent, getPreviousEventHash, witness,
   read, loadFromFile, saveToFile,
@@ -45,11 +46,11 @@ import {
 
 ---
 
-### `create([options])` -> `{keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog}`
+### `create([options])` -> `{keyPair, heartbeatSecret, didDocument, cryptographicEventLog}`
 
 Creates a new `did:cel` DID document with a self-certifying identifier, an
-initial assertion method key pair, a heartbeat key pair, and an initial signed
-create event already wrapped in a Cryptographic Event Log.
+initial assertion method key pair, a 128-bit heartbeat master secret, and an
+initial signed create event already wrapped in a Cryptographic Event Log.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -57,7 +58,7 @@ create event already wrapped in a Cryptographic Event Log.
 | `options.heartbeatFrequency` | string | ISO 8601 duration for the required heartbeat interval. Default: `'P10Y'`. |
 
 ```js
-const {keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog} =
+const {keyPair, heartbeatSecret, didDocument, cryptographicEventLog} =
   await create();
 
 console.log(didDocument.id); // did:cel:z...
@@ -175,6 +176,26 @@ const {didDocument: updatedDoc} = setHeartbeatFrequency({
   didDocument,
   heartbeatFrequency: 'P3M'
 });
+```
+
+---
+
+### `deriveHeartbeatKeyPair(masterSecret, index)` -> `Promise<KeyPair>`
+
+Derives an ECDSA P-256 Multikey key pair from a heartbeat master secret and an
+event index using HKDF-SHA256. The key pair at index 0 is the one whose hash
+is embedded in the DID document at creation time. Use index `i` when signing
+the i-th heartbeat update (after `i` prior heartbeat rotations have occurred).
+The returned key pair has `id` and `controller` set to its `did:key:` URI and
+is ready to pass directly to `createEvent()` as `assertionMethod`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `masterSecret` | Buffer | 16-byte heartbeat master secret from `create()`. |
+| `index` | number | Non-negative integer heartbeat key index. |
+
+```js
+const hbKeyPair = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
 ```
 
 ---
@@ -298,7 +319,7 @@ const SECRETS_DIR = './secrets';
 const PASSWORD = process.env.DID_PASSWORD;
 
 // 1. Create a new DID (returns CEL pre-loaded with the create event)
-const {keyPair, heartbeatKeyPair, didDocument, cryptographicEventLog} =
+const {keyPair, heartbeatSecret, didDocument, cryptographicEventLog} =
   await create();
 
 // 2. Witness the create event
@@ -334,7 +355,8 @@ const secretKeys = {
   authentication: [authKeyPair],
   capabilityInvocation: [],
   capabilityDelegation: [],
-  keyAgreement: []
+  keyAgreement: [],
+  heartbeat: heartbeatSecret
 };
 await saveSecrets({didIdentifier, secretKeys, password: PASSWORD, secretsDir: SECRETS_DIR});
 
@@ -367,7 +389,9 @@ The library implements the `did:cel` DID method, which consists of:
   anchoring and distributed trust without learning DID document contents.
 - **Heartbeat keys:** Each DID document stores SHA3-256 hashes of heartbeat
   `did:key:` URIs. A heartbeat operation signs an update with the heartbeat key
-  and must rotate out the used hash, replacing it with a new one.
+  (derived via `deriveHeartbeatKeyPair(masterSecret, index)`) and must rotate
+  out the used hash, replacing it with the hash of the next derived key. Only
+  the 16-byte master secret is stored; individual keys are derived on demand.
 - **Encrypted secret storage:** Private keys encrypted with AES-256-GCM using a
   scrypt-derived key and stored in YAML format.
 
