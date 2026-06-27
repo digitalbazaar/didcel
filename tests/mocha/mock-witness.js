@@ -4,12 +4,9 @@
 
 /**
  * Minimal mock HTTP server implementing the did:cel blind-witness endpoint.
+ * Accepts POST {digestMultibase} and returns {proof: DataIntegrityProof}.
  *
- * Protocol:
- *   POST {url}  body: {digestMultibase}
- *   Response:   {proof: DataIntegrityProof}
- *
- * verifyData = SHA256(JCS(proofOptions)) || rawHash, where rawHash is the
+ * VerifyData = SHA256(JCS(proofOptions)) || rawHash, where rawHash is the
  * 32-byte SHA3-256 digest extracted from the received multihash. This matches
  * exactly what `_verifyWitnessProof()` in cel.js reconstructs.
  */

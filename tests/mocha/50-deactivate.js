@@ -5,8 +5,8 @@ import {
   addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
   getPreviousEventHash, witness
 } from '../../lib/index.js';
+import {computeHeartbeatHash, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
-import {TEST_WITNESSES, computeHeartbeatHash} from './helpers.js';
 
 const {expect} = chai;
 

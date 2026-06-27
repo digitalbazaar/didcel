@@ -21,14 +21,14 @@ All public functions are exported from the package entry point:
 import {
   // DID document operations
   create, addVm, createEvent, deriveHeartbeatKeyPair,
-  hashDidKey, setHeartbeatFrequency,
+  sha3256Multibase, setHeartbeatFrequency,
   // CEL operations
   addEvent, getPreviousEventHash, witness,
   read, loadFromFile, saveToFile,
   // Secret key storage
   saveSecrets, loadSecrets,
   // Utilities
-  createJsonldPrettyPrinter, getObjectByIdSuffix, deleteObjectByIdSuffix,
+  getObjectByIdSuffix, deleteObjectByIdSuffix, prettyPrintCel,
   // Low-level witness HTTP client
   witnessService
 } from 'didcel';
@@ -74,19 +74,19 @@ const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
 
 ---
 
-### `hashDidKey(didKey)` → `Promise<string>`
+### `sha3256Multibase(input)` → `Promise<string>`
 
-Converts a `did:key:` URI to the base58btc multibase hash stored in
-`didDocument.heartbeat`.
+Returns the base58btc-encoded SHA3-256 multihash of `input` (a `z`-prefixed
+string). Use this to compute the heartbeat hash stored in `didDocument.heartbeat`:
 
 ```js
 const exported = await hbKey1.export({publicKey: true, includeContext: false});
-const nextHash = await hashDidKey(`did:key:${exported.publicKeyMultibase}`);
+const nextHash = await sha3256Multibase(`did:key:${exported.publicKeyMultibase}`);
 ```
 
 ---
 
-### `createEvent({type, data, signer, previousEventHash})` → `Promise<{event}>`
+### `createEvent({type, data, signingKeyPair, previousEventHash})` → `Promise<event>`
 
 Creates and signs a CEL event. All events must be signed by the **currently
 active heartbeat key** (from `deriveHeartbeatKeyPair`). Every event except
@@ -97,30 +97,32 @@ in `data`.
 |-----------|------|-------------|
 | `type` | string | `'update'`, `'heartbeat'`, or `'deactivate'`. |
 | `data` | object\|undefined | DID document for `update`; `{heartbeat: ["<next_hash>"]}` for `heartbeat`; `undefined` for `deactivate`. |
-| `signer` | KeyPair | The active heartbeat key pair. |
+| `signingKeyPair` | KeyPair | The active heartbeat key pair. |
 | `previousEventHash` | string | Hash of the previous event from `getPreviousEventHash()`. |
+
+Returns the signed event object directly (not wrapped in `{event}`).
 
 ```js
 // update: full DID document with rotated heartbeat hash
-const {event: updateEvent} = await createEvent({
+const updateEvent = await createEvent({
   type: 'update',
   data: {...updatedDoc, heartbeat: [nextHash]},
-  signer: hbKey0,
+  signingKeyPair: hbKey0,
   previousEventHash
 });
 
 // heartbeat: partial object with only the new heartbeat hash
-const {event: hbEvent} = await createEvent({
+const hbEvent = await createEvent({
   type: 'heartbeat',
   data: {heartbeat: [nextHash]},
-  signer: hbKey0,
+  signingKeyPair: hbKey0,
   previousEventHash
 });
 
 // deactivate: no data, no rotation needed
-const {event: deactivateEvent} = await createEvent({
+const deactivateEvent = await createEvent({
   type: 'deactivate',
-  signer: hbKey0,
+  signingKeyPair: hbKey0,
   previousEventHash
 });
 ```
@@ -145,7 +147,7 @@ Appends a pre-signed event to the CEL. Throws `MALFORMED_CEL_ERROR` if the log
 is empty or already deactivated.
 
 ```js
-await addEvent({cel: cryptographicEventLog, event});
+await addEvent({cel: cryptographicEventLog, event: updateEvent});
 ```
 
 ---
@@ -310,8 +312,8 @@ index N → signs deactivate (no rotation needed)
 import {join} from 'node:path';
 import {
   addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
-  getPreviousEventHash, hashDidKey, loadFromFile, loadSecrets,
-  saveSecrets, saveToFile, witness
+  getPreviousEventHash, loadFromFile, loadSecrets, saveSecrets,
+  saveToFile, sha3256Multibase, witness
 } from 'didcel';
 
 const WITNESSES = ['https://witness.example/witnesses/v1'];
@@ -319,11 +321,11 @@ const LOGS_DIR = './logs';
 const SECRETS_DIR = './secrets';
 const PASSWORD = process.env.DID_PASSWORD;
 
-// Helper: compute hash of heartbeat key at given index
-async function hbHash(secret, index) {
+// Helper: hash of heartbeat key at a given index
+async function heartbeatHash(secret, index) {
   const kp = await deriveHeartbeatKeyPair(secret, index);
   const exp = await kp.export({publicKey: true, includeContext: false});
-  return hashDidKey(`did:key:${exp.publicKeyMultibase}`);
+  return sha3256Multibase(`did:key:${exp.publicKeyMultibase}`);
 }
 
 // 1. Create a new DID
@@ -335,12 +337,12 @@ await witness({cel: cryptographicEventLog, witnesses: WITNESSES});
 const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
 const {didDocument: updatedDoc} =
   await addVm({didDocument, verificationRelationship: 'authentication'});
-updatedDoc.heartbeat = [await hbHash(heartbeatSecret, 1)];
+updatedDoc.heartbeat = [await heartbeatHash(heartbeatSecret, 1)];
 
-const {event: updateEvent} = await createEvent({
+const updateEvent = await createEvent({
   type: 'update',
   data: updatedDoc,
-  signer: hbKey0,
+  signingKeyPair: hbKey0,
   previousEventHash: await getPreviousEventHash({cel: cryptographicEventLog})
 });
 await addEvent({cel: cryptographicEventLog, event: updateEvent});
@@ -401,11 +403,11 @@ const {valid, errors, didDocument: resolved} = await loadFromFile({
 | File | Contents |
 |------|----------|
 | `lib/index.js` | Package entry point; all public exports |
-| `lib/didcel.js` | `create`, `addVm`, `createEvent`, `setHeartbeatFrequency`, `hashDidKey`, `deriveHeartbeatKeyPair` |
+| `lib/didcel.js` | `create`, `addVm`, `createEvent`, `setHeartbeatFrequency`, `deriveHeartbeatKeyPair` |
 | `lib/cel.js` | `addEvent`, `getPreviousEventHash`, `witness`, `read`, `loadFromFile`, `saveToFile` |
 | `lib/secrets.js` | `saveSecrets`, `loadSecrets` |
 | `lib/witness.js` | HTTP client for witness services |
-| `lib/utils.js` | JSON-LD key ordering; suffix-based document lookup utilities |
+| `lib/utils.js` | `sha3256Multibase`, `prettyPrintCel`, suffix-based document lookup |
 | `lib/validate.js` | AJV JSON Schema validation for DID documents and CELs |
 
 ## License

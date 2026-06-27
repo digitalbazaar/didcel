@@ -10,7 +10,8 @@ describe('create', function() {
   this.timeout(30000);
 
   it('should create a well-formed DID document', async () => {
-    const {didDocument, cryptographicEventLog, heartbeatSecret} = await create();
+    const {didDocument, cryptographicEventLog, heartbeatSecret} =
+      await create();
 
     // identifier
     expect(didDocument.id).to.match(/^did:cel:z/);

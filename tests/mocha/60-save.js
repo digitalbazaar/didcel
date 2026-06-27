@@ -6,10 +6,10 @@ import {
   loadFromFile, loadSecrets, saveSecrets, saveToFile,
   setHeartbeatFrequency, witness
 } from '../../lib/index.js';
-import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import {
-  TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES, computeHeartbeatHash
+  computeHeartbeatHash, TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES,
 } from './helpers.js';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import chai from 'chai';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';

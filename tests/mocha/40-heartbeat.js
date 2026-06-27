@@ -5,8 +5,8 @@ import {
   addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
   witness
 } from '../../lib/index.js';
+import {computeHeartbeatHash, TEST_WITNESSES} from './helpers.js';
 import chai from 'chai';
-import {TEST_WITNESSES, computeHeartbeatHash} from './helpers.js';
 
 const {expect} = chai;
 
@@ -47,7 +47,8 @@ describe('heartbeat', function() {
     const {cryptographicEventLog} = await runHeartbeat();
 
     const heartbeatEntry = cryptographicEventLog.log[1];
-    expect(heartbeatEntry.event.operation).to.have.property('type', 'heartbeat');
+    expect(heartbeatEntry.event.operation).to.have.property(
+      'type', 'heartbeat');
     expect(heartbeatEntry.event.operation.data).to.be.an('object');
   });
 
