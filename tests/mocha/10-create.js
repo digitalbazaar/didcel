@@ -9,7 +9,7 @@ const {expect} = chai;
 describe('create', function() {
   this.timeout(30000);
 
-  it('should create a well-formed DID document', async () => {
+  it('should create a well-formed DID document without service', async () => {
     const {didDocument, cryptographicEventLog, heartbeatSecret} =
       await create();
 
@@ -40,12 +40,8 @@ describe('create', function() {
     expect(Buffer.isBuffer(heartbeatSecret)).to.be.true;
     expect(heartbeatSecret).to.have.length(16);
 
-    // service: must be an array of service objects (DID Core conformant)
-    expect(didDocument.service).to.be.an('array').with.length.at.least(1);
-    expect(didDocument.service[0]).to.have.property(
-      'type', 'CelStorageService');
-    expect(didDocument.service[0].serviceEndpoint).to.be.an('array')
-      .with.length.at.least(1);
+    // no service property when none supplied
+    expect(didDocument.service).to.be.undefined;
 
     // CEL create event
     const createEntry = cryptographicEventLog.log[0];
@@ -53,5 +49,18 @@ describe('create', function() {
     expect(createEntry.event.operation.data.id).to.equal(didDocument.id);
     expect(createEntry.event.proof).to.have.property(
       'type', 'DataIntegrityProof');
+  });
+
+  it('should include service endpoints when supplied', async () => {
+    const service = [{
+      type: 'CelStorageService',
+      serviceEndpoint: ['https://storage.example/v1']
+    }];
+    const {didDocument} = await create({service});
+
+    expect(didDocument.service).to.be.an('array').with.length(1);
+    expect(didDocument.service[0]).to.have.property('type', 'CelStorageService');
+    expect(didDocument.service[0].serviceEndpoint).to.deep.equal(
+      ['https://storage.example/v1']);
   });
 });
