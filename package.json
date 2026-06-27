@@ -1,13 +1,26 @@
 {
   "name": "didcel",
-  "version": "0.0.1",
+  "version": "0.9.0",
+  "description": "JavaScript library for creating and managing DIDs using the did:cel method, secured by a Cryptographic Event Log (CEL).",
   "type": "module",
   "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "lint": "eslint .",
     "test": "mocha"
   },
-  "keywords": [],
+  "keywords": [
+    "did",
+    "did:cel",
+    "decentralized-identifiers",
+    "cryptographic-event-log",
+    "verifiable-credentials"
+  ],
   "author": {
     "name": "Digital Bazaar, Inc.",
     "url": "https://digitalbazaar.com/"
@@ -15,8 +28,7 @@
   "contributors": [
     "Manu Sporny <msporny@digitalbazaar.com> (https://manu.sporny.org/)"
   ],
-  "license": "BSD",
-  "description": "",
+  "license": "BSD-3-Clause",
   "dependencies": {
     "@digitalbazaar/data-integrity": "^2.5.0",
     "@digitalbazaar/ecdsa-jcs-2019-cryptosuite": "^1.0.0",
@@ -30,7 +42,6 @@
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
-    "@bedrock/test": "^8.2.0",
     "cross-env": "^7.0.3",
     "eslint": "^8.57.1",
     "eslint-config-digitalbazaar": "^5.2.0",
