@@ -35,7 +35,7 @@ describe('save', function() {
   });
 
   describe('saveSecrets / loadSecrets', function() {
-    it('should save and load secrets with the correct key pairs', async () => {
+    it('should round-trip key pairs and heartbeat secret', async () => {
       const {heartbeatSecret, didDocument} = await create();
       const {keyPair} = await addVm(
         {didDocument, verificationRelationship: 'assertionMethod'});
@@ -63,30 +63,8 @@ describe('save', function() {
           {publicKey: true, includeContext: false});
       expect(exportedLoaded.publicKeyMultibase)
         .to.equal(exportedOriginal.publicKeyMultibase);
-    });
 
-    it('should save and load the heartbeat master secret', async () => {
-      const {heartbeatSecret, didDocument} = await create();
-      const {keyPair} = await addVm(
-        {didDocument, verificationRelationship: 'assertionMethod'});
-      const didIdentifier = didDocument.id.replace('did:cel:', '');
-      const secretKeys = {
-        authentication: [],
-        assertionMethod: [keyPair],
-        capabilityInvocation: [],
-        capabilityDelegation: [],
-        keyAgreement: [],
-        heartbeat: heartbeatSecret
-      };
-
-      await saveSecrets(
-        {didIdentifier, secretKeys, password: TEST_PASSWORD, secretsDir});
-
-      const loaded = await loadSecrets(
-        {didIdentifier, password: TEST_PASSWORD, secretsDir});
-
-      expect(loaded.heartbeat).to.be.instanceOf(Buffer);
-      expect(loaded.heartbeat).to.have.length(16);
+      expect(loaded.heartbeat).to.be.instanceOf(Buffer).with.length(16);
       expect(loaded.heartbeat.toString('hex'))
         .to.equal(heartbeatSecret.toString('hex'));
     });

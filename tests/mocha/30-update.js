@@ -42,21 +42,17 @@ async function runUpdate() {
 describe('update', function() {
   this.timeout(120000);
 
-  it('should produce a CEL with 2 events (create + update)', async () => {
-    const {cryptographicEventLog} = await runUpdate();
+  it('should produce a 2-event hash-linked CEL with witness proofs',
+    async () => {
+      const {cryptographicEventLog} = await runUpdate();
 
-    expect(cryptographicEventLog).to.have.property('log');
-    expect(cryptographicEventLog.log).to.have.length(2);
-  });
-
-  it('should hashlink events via previousEventHash', async () => {
-    const {cryptographicEventLog} = await runUpdate();
-
-    const updateEntry = cryptographicEventLog.log[1];
-    expect(updateEntry.event).to.have.property('previousEventHash');
-    expect(updateEntry.event.previousEventHash).to.be.a('string');
-    expect(updateEntry.event.previousEventHash).to.match(/^z/);
-  });
+      expect(cryptographicEventLog.log).to.have.length(2);
+      const updateEntry = cryptographicEventLog.log[1];
+      expect(updateEntry.event).to.have.property('previousEventHash');
+      expect(updateEntry.event.previousEventHash).to.match(/^z/);
+      expect(updateEntry).to.have.property('proof');
+      expect(updateEntry.proof).to.be.an('array').with.length.at.least(1);
+    });
 
   it('should include the new authentication key in the update event',
     async () => {
@@ -66,19 +62,8 @@ describe('update', function() {
       expect(updateEntry.event.operation.type).to.equal('update');
       const didDoc = updateEntry.event.operation.data;
       expect(didDoc).to.have.property('authentication');
-      expect(didDoc.authentication).to.be.an('array');
-      expect(didDoc.authentication.length).to.be.at.least(1);
+      expect(didDoc.authentication).to.be.an('array').with.length.at.least(1);
     });
-
-  it('should have witness proofs on both events', async () => {
-    const {cryptographicEventLog} = await runUpdate();
-
-    for(const entry of cryptographicEventLog.log) {
-      expect(entry).to.have.property('proof');
-      expect(entry.proof).to.be.an('array');
-      expect(entry.proof.length).to.be.at.least(1);
-    }
-  });
 
   it('should initialize a new array when verificationRelationship is absent',
     async () => {

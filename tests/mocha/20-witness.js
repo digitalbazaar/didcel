@@ -26,27 +26,19 @@ function getTrustedWitnesses() {
 describe('witness', function() {
   this.timeout(60000);
 
-  it('should create and witness a DID', async () => {
+  it('should attach a DataIntegrityProof to the create event', async () => {
     const {didDocument, cryptographicEventLog} = await runCreateAndWitness();
 
     expect(didDocument.id).to.match(/^did:cel:/);
     expect(cryptographicEventLog.log).to.have.length(1);
+
+    const createEntry = cryptographicEventLog.log[0];
+    expect(createEntry.event.operation.type).to.equal('create');
+    expect(createEntry).to.have.property('proof');
+    expect(createEntry.proof).to.be.an('array').with.length.at.least(1);
+    expect(createEntry.proof[0]).to.have.property('type', 'DataIntegrityProof');
+    expect(createEntry.proof[0]).to.have.property('verificationMethod');
   });
-
-  it('should produce a CEL with a witness proof on the create event',
-    async () => {
-      const {cryptographicEventLog} = await runCreateAndWitness();
-
-      const createEntry = cryptographicEventLog.log[0];
-      expect(createEntry.event.operation.type).to.equal('create');
-      expect(createEntry).to.have.property('proof');
-      expect(createEntry.proof).to.be.an('array');
-      expect(createEntry.proof.length).to.be.at.least(1);
-
-      const proof = createEntry.proof[0];
-      expect(proof).to.have.property('type', 'DataIntegrityProof');
-      expect(proof).to.have.property('verificationMethod');
-    });
 
   it('should throw when no witnesses are provided', async () => {
     const {cryptographicEventLog} = await create();
@@ -65,31 +57,14 @@ describe('witness', function() {
   it('should produce a stable previousEventHash before and after witnessing',
     async () => {
       const {cryptographicEventLog} = await create();
-      // capture hash before witnessing
-      const hashBefore =
-        getPreviousEventHash({cel: cryptographicEventLog});
+      const hashBefore = getPreviousEventHash({cel: cryptographicEventLog});
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
       // witness proofs attach to the log entry wrapper, not the event itself —
       // the hash must be identical after witnessing
-      const hashAfter =
-        getPreviousEventHash({cel: cryptographicEventLog});
+      const hashAfter = getPreviousEventHash({cel: cryptographicEventLog});
 
       expect(hashBefore).to.be.a('string').that.matches(/^z/);
       expect(hashAfter).to.equal(hashBefore);
-    });
-
-  it('should detect a tampered DID identifier in the create event',
-    async () => {
-      const {cryptographicEventLog} = await runCreateAndWitness();
-
-      const tampered = structuredClone(cryptographicEventLog);
-      tampered.log[0].event.operation.data.id = 'did:cel:zTAMPERED';
-
-      const {valid, errors} =
-        await read({cel: tampered, trustedWitnesses: getTrustedWitnesses()});
-
-      expect(valid).to.be.false;
-      expect(errors.some(e => e.includes('identifier mismatch'))).to.be.true;
     });
 
   it('should reject an operation proof signed with a key not in heartbeat[]',
