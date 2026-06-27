@@ -3,15 +3,15 @@
  */
 
 /**
- * Minimal mock HTTP server that implements the hmbd blind-witness endpoint.
+ * Minimal mock HTTP server implementing the did:cel blind-witness endpoint.
  *
- * The protocol:
+ * Protocol:
  *   POST {url}  body: {digestMultibase}
- *   Response:   {proof: DataIntegrityProof}.
+ *   Response:   {proof: DataIntegrityProof}
  *
- * The witness signs verifyData = SHA256(canonicalize(proofOptions)) || rawHash
- * where rawHash is the 32-byte SHA2-256 digest extracted from the received
- * multihash. This exactly matches what cel.js _verifyWitnessProof() expects.
+ * verifyData = SHA256(JCS(proofOptions)) || rawHash, where rawHash is the
+ * 32-byte SHA3-256 digest extracted from the received multihash. This matches
+ * exactly what `_verifyWitnessProof()` in cel.js reconstructs.
  */
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
@@ -28,7 +28,6 @@ let _keyPair = null;
 let _verificationMethod = null;
 
 export async function start() {
-  // generate a fresh witness key pair for this test run
   _keyPair = await EcdsaMultikey.generate({curve: 'P-256'});
   const exported =
     await _keyPair.export({publicKey: true, includeContext: false});
@@ -41,9 +40,7 @@ export async function start() {
 
   const {port} = _server.address();
   const url = `http://127.0.0.1:${port}/witness`;
-  // populate the shared TEST_WITNESSES array so all test files see it
   TEST_WITNESSES.push(url);
-  // expose the witness DID so tests can build trustedWitnesses lists
   TEST_WITNESS_DIDS.push(didKeyId);
 }
 
@@ -66,18 +63,16 @@ async function _handleRequest(req, res) {
   }
 
   try {
-    // collect request body
     const chunks = [];
     for await (const chunk of req) {
       chunks.push(chunk);
     }
     const {digestMultibase} = JSON.parse(Buffer.concat(chunks).toString());
 
-    // extract the raw 32-byte SHA2-256 digest from the base58btc multihash
+    // strip the 2-byte multihash header to get the raw 32-byte digest
     const mhBytes = base58btc.decode(digestMultibase);
     const rawHash = mhBytes.slice(MULTIHASH_HEADER_LENGTH);
 
-    // build proof options — everything the proof will contain except proofValue
     const proofOptions = {
       '@context': 'https://w3id.org/security/data-integrity/v2',
       created: new Date().toISOString(),
@@ -87,8 +82,7 @@ async function _handleRequest(req, res) {
       verificationMethod: _verificationMethod
     };
 
-    // verifyData = SHA256(canonicalize(proofOptions)) || rawHash
-    // this must exactly match what _verifyWitnessProof() reconstructs in cel.js
+    // verifyData = SHA256(JCS(proofOptions)) || rawHash
     const c14nProof = canonicalize(proofOptions);
     const proofHash = new Uint8Array(
       crypto.createHash('sha256').update(c14nProof).digest());
@@ -96,7 +90,6 @@ async function _handleRequest(req, res) {
     verifyData.set(proofHash, 0);
     verifyData.set(rawHash, proofHash.length);
 
-    // sign and base58btc-encode (includes 'z' multibase prefix)
     const signer = _keyPair.signer();
     const signatureBytes = await signer.sign({data: verifyData});
     const proofValue = base58btc.encode(signatureBytes);

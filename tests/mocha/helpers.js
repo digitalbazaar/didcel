@@ -10,12 +10,12 @@ export const TEST_WITNESSES = [];
 export const TEST_WITNESS_DIDS = [];
 
 /**
- * Derives the heartbeat key at the given index and returns its did:key hash.
- * This is the value that goes into the DID document's heartbeat[] array.
+ * Returns the SHA3-256 multibase hash of the heartbeat did:key at `index`.
+ * This is the value stored in the DID document's `heartbeat[]` array.
  *
- * @param {Buffer|Uint8Array} heartbeatSecret - The 16-byte master secret.
- * @param {number} index - The key derivation index.
- * @returns {Promise<string>} Base58btc multibase-encoded SHA3-256 hash.
+ * @param {Buffer|Uint8Array} heartbeatSecret - 16-byte HKDF master secret.
+ * @param {number} index - Key derivation index.
+ * @returns {Promise<string>} Base58btc-encoded SHA3-256 multihash (`z`-prefixed).
  */
 export async function computeHeartbeatHash(heartbeatSecret, index) {
   const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
