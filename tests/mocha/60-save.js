@@ -2,8 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
-  loadFromFile, loadSecrets, saveSecrets, saveToFile,
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
+  getPreviousEventHash, loadFromFile, loadSecrets, saveSecrets, saveToFile,
   setHeartbeatFrequency, witness
 } from '../../lib/index.js';
 import {
@@ -36,7 +36,9 @@ describe('save', function() {
 
   describe('saveSecrets / loadSecrets', function() {
     it('should save and load secrets with the correct key pairs', async () => {
-      const {keyPair, heartbeatSecret, didDocument} = await create();
+      const {heartbeatSecret, didDocument} = await create();
+      const {keyPair} = await addVm(
+        {didDocument, verificationRelationship: 'assertionMethod'});
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [],
@@ -64,7 +66,9 @@ describe('save', function() {
     });
 
     it('should save and load the heartbeat master secret', async () => {
-      const {keyPair, heartbeatSecret, didDocument} = await create();
+      const {heartbeatSecret, didDocument} = await create();
+      const {keyPair} = await addVm(
+        {didDocument, verificationRelationship: 'assertionMethod'});
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [],
@@ -88,8 +92,11 @@ describe('save', function() {
     });
 
     it('should save secrets across multiple relationships', async () => {
-      const {keyPair, heartbeatSecret, didDocument} = await create();
-      const {keyPair: authKeyPair} = await create();
+      const {heartbeatSecret, didDocument} = await create();
+      const {keyPair} = await addVm(
+        {didDocument, verificationRelationship: 'assertionMethod'});
+      const {keyPair: authKeyPair} = await addVm(
+        {didDocument, verificationRelationship: 'authentication'});
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [authKeyPair],
@@ -111,7 +118,9 @@ describe('save', function() {
     });
 
     it('should fail to load secrets with wrong password', async () => {
-      const {keyPair, heartbeatSecret, didDocument} = await create();
+      const {heartbeatSecret, didDocument} = await create();
+      const {keyPair} = await addVm(
+        {didDocument, verificationRelationship: 'assertionMethod'});
       const didIdentifier = didDocument.id.replace('did:cel:', '');
       const secretKeys = {
         authentication: [],

@@ -24,12 +24,8 @@ describe('create', function() {
     // heartbeat frequency
     expect(didDocument.heartbeatFrequency).to.be.a('string').that.is.not.empty;
 
-    // assertionMethod: one embedded key with required fields
-    expect(didDocument.assertionMethod).to.be.an('array').with.length(1);
-    const assertionKey = didDocument.assertionMethod[0];
-    expect(assertionKey.type).to.equal('Multikey');
-    expect(assertionKey.controller).to.equal(didDocument.id);
-    expect(assertionKey.publicKeyMultibase).to.be.a('string').that.is.not.empty;
+    // assertionMethod: absent at create time — keys are added via addVm()
+    expect(didDocument.assertionMethod).to.be.undefined;
 
     // heartbeat: one base58btc-encoded SHA3-256 multihash of a did:key URI
     expect(didDocument.heartbeat).to.be.an('array').with.length(1);
