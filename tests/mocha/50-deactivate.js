@@ -2,8 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair, hashDidKey,
-  getPreviousEventHash, witness
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
+  getPreviousEventHash, sha3256Multibase, witness
 } from '../../lib/index.js';
 import chai from 'chai';
 import {TEST_WITNESSES} from './helpers.js';
@@ -20,7 +20,7 @@ async function runDeactivate() {
   const hbKey1Exported =
     await hbKey1.export({publicKey: true, includeContext: false});
   const nextHbHash =
-    await hashDidKey(`did:key:${hbKey1Exported.publicKeyMultibase}`);
+    await sha3256Multibase(`did:key:${hbKey1Exported.publicKeyMultibase}`);
 
   const {didDocument: updatedDoc} = await addVm({
     didDocument,
@@ -34,7 +34,7 @@ async function runDeactivate() {
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    signer: hbKey0,
+    signingKeyPair: hbKey0,
     previousEventHash: updatePreviousHash
   });
   await addEvent({cel: cryptographicEventLog, event: updateEvent});
@@ -46,7 +46,7 @@ async function runDeactivate() {
   const {event: deactivateEvent} = await createEvent({
     type: 'deactivate',
     data: undefined,
-    signer: hbKey1,
+    signingKeyPair: hbKey1,
     previousEventHash: deactivatePreviousHash
   });
   await addEvent({cel: cryptographicEventLog, event: deactivateEvent});

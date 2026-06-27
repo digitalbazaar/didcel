@@ -3,7 +3,7 @@
  */
 import {
   addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
-  hashDidKey, witness
+  sha3256Multibase, witness
 } from '../../lib/index.js';
 import chai from 'chai';
 import {TEST_WITNESSES} from './helpers.js';
@@ -23,7 +23,7 @@ async function runHeartbeat() {
   const nextExported =
     await nextKeyPair.export({publicKey: true, includeContext: false});
   const nextHeartbeatHash =
-    await hashDidKey(`did:key:${nextExported.publicKeyMultibase}`);
+    await sha3256Multibase(`did:key:${nextExported.publicKeyMultibase}`);
 
   // build updated DID document: remove key 0 hash, add key 1 hash
   const updatedDoc = structuredClone(didDocument);
@@ -35,7 +35,7 @@ async function runHeartbeat() {
   const {event: hbEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    signer: hbKeyPair,
+    signingKeyPair: hbKeyPair,
     previousEventHash
   });
   await addEvent({cel: cryptographicEventLog, event: hbEvent});

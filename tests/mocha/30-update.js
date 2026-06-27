@@ -2,8 +2,8 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair, hashDidKey,
-  getPreviousEventHash, witness
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
+  getPreviousEventHash, sha3256Multibase, witness
 } from '../../lib/index.js';
 import chai from 'chai';
 import {TEST_WITNESSES} from './helpers.js';
@@ -13,7 +13,7 @@ const {expect} = chai;
 async function nextHeartbeatHash(heartbeatSecret, index) {
   const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
   const exported = await kp.export({publicKey: true, includeContext: false});
-  return hashDidKey(`did:key:${exported.publicKeyMultibase}`);
+  return sha3256Multibase(`did:key:${exported.publicKeyMultibase}`);
 }
 
 async function runUpdate() {
@@ -35,7 +35,7 @@ async function runUpdate() {
   const {event: updateEvent} = await createEvent({
     type: 'update',
     data: updatedDoc,
-    signer: hbKey0,
+    signingKeyPair: hbKey0,
     previousEventHash
   });
   await addEvent({cel: cryptographicEventLog, event: updateEvent});
@@ -93,7 +93,7 @@ describe('update', function() {
       const updatedDoc = structuredClone(didDocument);
       updatedDoc.heartbeat = [await nextHeartbeatHash(heartbeatSecret, 1)];
       const {event: updateEvent} = await createEvent({
-        type: 'update', data: updatedDoc, signer: hbKey0,
+        type: 'update', data: updatedDoc, signingKeyPair: hbKey0,
         previousEventHash: undefined
       });
 
