@@ -3,10 +3,10 @@
  */
 import {
   addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
-  getPreviousEventHash, sha3256Multibase, witness
+  getPreviousEventHash, witness
 } from '../../lib/index.js';
 import chai from 'chai';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESSES, computeHeartbeatHash} from './helpers.js';
 
 const {expect} = chai;
 
@@ -17,21 +17,17 @@ async function runDeactivate() {
 
   const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
   const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
-  const hbKey1Exported =
-    await hbKey1.export({publicKey: true, includeContext: false});
-  const nextHbHash =
-    await sha3256Multibase(`did:key:${hbKey1Exported.publicKeyMultibase}`);
 
   const {didDocument: updatedDoc} = await addVm({
     didDocument,
     verificationRelationship: 'authentication'
   });
   // rotate heartbeat key 0→1 in the update data
-  updatedDoc.heartbeat = [nextHbHash];
+  updatedDoc.heartbeat = [await computeHeartbeatHash(heartbeatSecret, 1)];
 
   const updatePreviousHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
-  const {event: updateEvent} = await createEvent({
+  const updateEvent = await createEvent({
     type: 'update',
     data: updatedDoc,
     signingKeyPair: hbKey0,
@@ -43,7 +39,7 @@ async function runDeactivate() {
 
   const deactivatePreviousHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
-  const {event: deactivateEvent} = await createEvent({
+  const deactivateEvent = await createEvent({
     type: 'deactivate',
     data: undefined,
     signingKeyPair: hbKey1,

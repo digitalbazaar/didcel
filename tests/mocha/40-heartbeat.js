@@ -3,38 +3,26 @@
  */
 import {
   addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
-  sha3256Multibase, witness
+  witness
 } from '../../lib/index.js';
 import chai from 'chai';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESSES, computeHeartbeatHash} from './helpers.js';
 
 const {expect} = chai;
 
 async function runHeartbeat() {
-  const {heartbeatSecret, didDocument, cryptographicEventLog} = await create();
+  const {heartbeatSecret, cryptographicEventLog} = await create();
 
   await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
   // derive key 0 (currently in heartbeat[]) for signing this heartbeat event
   const hbKeyPair = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
 
-  // derive key 1 hash to rotate into the updated document
-  const nextKeyPair = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
-  const nextExported =
-    await nextKeyPair.export({publicKey: true, includeContext: false});
-  const nextHeartbeatHash =
-    await sha3256Multibase(`did:key:${nextExported.publicKeyMultibase}`);
-
-  // build updated DID document: remove key 0 hash, add key 1 hash
-  const updatedDoc = structuredClone(didDocument);
-  updatedDoc.heartbeat = [nextHeartbeatHash];
-  delete updatedDoc.proof;
-
   const previousEventHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
-  const {event: hbEvent} = await createEvent({
-    type: 'update',
-    data: updatedDoc,
+  const hbEvent = await createEvent({
+    type: 'heartbeat',
+    data: {heartbeat: [await computeHeartbeatHash(heartbeatSecret, 1)]},
     signingKeyPair: hbKeyPair,
     previousEventHash
   });
@@ -59,7 +47,7 @@ describe('heartbeat', function() {
     const {cryptographicEventLog} = await runHeartbeat();
 
     const heartbeatEntry = cryptographicEventLog.log[1];
-    expect(heartbeatEntry.event.operation).to.have.property('type', 'update');
+    expect(heartbeatEntry.event.operation).to.have.property('type', 'heartbeat');
     expect(heartbeatEntry.event.operation.data).to.be.an('object');
   });
 

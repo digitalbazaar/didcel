@@ -3,22 +3,18 @@
  */
 import {
   addEvent, create, createEvent, deriveHeartbeatKeyPair, getPreviousEventHash,
-  loadFromFile, loadSecrets, saveSecrets, saveToFile, sha3256Multibase,
+  loadFromFile, loadSecrets, saveSecrets, saveToFile,
   setHeartbeatFrequency, witness
 } from '../../lib/index.js';
 import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
-import {TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
+import {
+  TEST_PASSWORD, TEST_WITNESS_DIDS, TEST_WITNESSES, computeHeartbeatHash
+} from './helpers.js';
 import chai from 'chai';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
 const {expect} = chai;
-
-async function computeHbHash(heartbeatSecret, index) {
-  const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
-  const exported = await kp.export({publicKey: true, includeContext: false});
-  return sha3256Multibase(`did:key:${exported.publicKeyMultibase}`);
-}
 
 describe('save', function() {
   this.timeout(120000);
@@ -175,11 +171,11 @@ describe('save', function() {
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
       const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
-      const nextHash = await computeHbHash(heartbeatSecret, 1);
+      const nextHash = await computeHeartbeatHash(heartbeatSecret, 1);
 
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: hbEvent} = await createEvent({
+      const hbEvent = await createEvent({
         type: 'heartbeat',
         data: {heartbeat: [nextHash]},
         signingKeyPair: hbKey0,
@@ -211,12 +207,12 @@ describe('save', function() {
         cryptographicEventLog.log[0].proof[0].created;
 
       const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
-      const nextHash = await computeHbHash(heartbeatSecret, 1);
+      const nextHash = await computeHeartbeatHash(heartbeatSecret, 1);
 
       // add a heartbeat entry after a small delay
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: hbEvent} = await createEvent({
+      const hbEvent = await createEvent({
         type: 'heartbeat',
         data: {heartbeat: [nextHash]},
         signingKeyPair: hbKey0,
@@ -254,11 +250,11 @@ describe('save', function() {
       await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
 
       const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
-      const nextHash = await computeHbHash(heartbeatSecret, 1);
+      const nextHash = await computeHeartbeatHash(heartbeatSecret, 1);
 
       const previousEventHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: hbEvent} = await createEvent({
+      const hbEvent = await createEvent({
         type: 'heartbeat',
         data: {heartbeat: [nextHash]},
         signingKeyPair: hbKey0,
@@ -293,8 +289,8 @@ describe('save', function() {
 
         const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
         const hbKey1 = await deriveHeartbeatKeyPair(heartbeatSecret, 1);
-        const hbKey1Hash = await computeHbHash(heartbeatSecret, 1);
-        const hbKey2Hash = await computeHbHash(heartbeatSecret, 2);
+        const hbKey1Hash = await computeHeartbeatHash(heartbeatSecret, 1);
+        const hbKey2Hash = await computeHeartbeatHash(heartbeatSecret, 2);
 
         // entry 1: update heartbeatFrequency to P1D; rotate hbKey0→hbKey1
         const {didDocument: updatedDoc} =
@@ -302,7 +298,7 @@ describe('save', function() {
         updatedDoc.heartbeat = [hbKey1Hash];
         const updateHash =
           await getPreviousEventHash({cel: cryptographicEventLog});
-        const {event: updateEvent} = await createEvent({
+        const updateEvent = await createEvent({
           type: 'update', data: updatedDoc,
           signingKeyPair: hbKey0, previousEventHash: updateHash
         });
@@ -312,7 +308,7 @@ describe('save', function() {
         // entry 2: heartbeat — gap from entry 1 to entry 2 will be backdated
         // to 2 days, which exceeds the new P1D heartbeatFrequency
         const hbHash = await getPreviousEventHash({cel: cryptographicEventLog});
-        const {event: hbEvent} = await createEvent({
+        const hbEvent = await createEvent({
           type: 'heartbeat',
           data: {heartbeat: [hbKey2Hash]},
           signingKeyPair: hbKey1,
@@ -372,7 +368,7 @@ describe('save', function() {
       // append a deactivate event (no rotation needed for deactivate)
       const deactivateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const {event: deactivateEvent} = await createEvent({
+      const deactivateEvent = await createEvent({
         type: 'deactivate', data: undefined,
         signingKeyPair: hbKey0, previousEventHash: deactivateHash
       });
@@ -384,8 +380,8 @@ describe('save', function() {
       // that read() should reject
       const postDeactivateHash =
         await getPreviousEventHash({cel: cryptographicEventLog});
-      const nextHash = await computeHbHash(heartbeatSecret, 1);
-      const {event: heartbeatEvent} = await createEvent({
+      const nextHash = await computeHeartbeatHash(heartbeatSecret, 1);
+      const heartbeatEvent = await createEvent({
         type: 'heartbeat', data: {heartbeat: [nextHash]},
         signingKeyPair: hbKey0, previousEventHash: postDeactivateHash
       });

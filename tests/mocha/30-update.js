@@ -3,18 +3,12 @@
  */
 import {
   addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
-  getPreviousEventHash, sha3256Multibase, witness
+  getPreviousEventHash, witness
 } from '../../lib/index.js';
 import chai from 'chai';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESSES, computeHeartbeatHash} from './helpers.js';
 
 const {expect} = chai;
-
-async function nextHeartbeatHash(heartbeatSecret, index) {
-  const kp = await deriveHeartbeatKeyPair(heartbeatSecret, index);
-  const exported = await kp.export({publicKey: true, includeContext: false});
-  return sha3256Multibase(`did:key:${exported.publicKeyMultibase}`);
-}
 
 async function runUpdate() {
   const {heartbeatSecret, didDocument, cryptographicEventLog} = await create();
@@ -28,11 +22,11 @@ async function runUpdate() {
     verificationRelationship: 'authentication'
   });
   // rotation is required for every non-deactivate event
-  updatedDoc.heartbeat = [await nextHeartbeatHash(heartbeatSecret, 1)];
+  updatedDoc.heartbeat = [await computeHeartbeatHash(heartbeatSecret, 1)];
 
   const previousEventHash =
     await getPreviousEventHash({cel: cryptographicEventLog});
-  const {event: updateEvent} = await createEvent({
+  const updateEvent = await createEvent({
     type: 'update',
     data: updatedDoc,
     signingKeyPair: hbKey0,
@@ -91,8 +85,8 @@ describe('update', function() {
       const {heartbeatSecret, didDocument} = await create();
       const hbKey0 = await deriveHeartbeatKeyPair(heartbeatSecret, 0);
       const updatedDoc = structuredClone(didDocument);
-      updatedDoc.heartbeat = [await nextHeartbeatHash(heartbeatSecret, 1)];
-      const {event: updateEvent} = await createEvent({
+      updatedDoc.heartbeat = [await computeHeartbeatHash(heartbeatSecret, 1)];
+      const updateEvent = await createEvent({
         type: 'update', data: updatedDoc, signingKeyPair: hbKey0,
         previousEventHash: undefined
       });
