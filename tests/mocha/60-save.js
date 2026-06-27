@@ -358,6 +358,20 @@ describe('save', function() {
       expect(errors).to.have.length.at.least(1);
     });
 
+    it('should throw when loading from a non-existent file path', async () => {
+      const missingPath = join(logsDir, 'does-not-exist.cel');
+
+      let error;
+      try {
+        await loadFromFile(
+          {filename: missingPath, trustedWitnesses: getTrustedWitnesses()});
+      } catch(e) {
+        error = e;
+      }
+
+      expect(error).to.exist;
+    });
+
     it('should reject any operation after a deactivate event', async () => {
       const {heartbeatSecret, didDocument, cryptographicEventLog} =
         await create();

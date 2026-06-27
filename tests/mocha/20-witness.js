@@ -1,9 +1,11 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {create, witness} from '../../lib/index.js';
+import {
+  create, getPreviousEventHash, read, witness
+} from '../../lib/index.js';
 import chai from 'chai';
-import {TEST_WITNESSES} from './helpers.js';
+import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
 
 const {expect} = chai;
 
@@ -11,6 +13,14 @@ async function runCreateAndWitness() {
   const {didDocument, cryptographicEventLog} = await create();
   await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
   return {didDocument, cryptographicEventLog};
+}
+
+function getTrustedWitnesses() {
+  return TEST_WITNESS_DIDS.map(id => ({
+    id,
+    validFrom: '2000-01-01T00:00:00Z',
+    validUntil: '2099-01-01T00:00:00Z'
+  }));
 }
 
 describe('witness', function() {
@@ -36,5 +46,68 @@ describe('witness', function() {
       const proof = createEntry.proof[0];
       expect(proof).to.have.property('type', 'DataIntegrityProof');
       expect(proof).to.have.property('verificationMethod');
+    });
+
+  it('should throw when no witnesses are provided', async () => {
+    const {cryptographicEventLog} = await create();
+
+    let error;
+    try {
+      await witness({cel: cryptographicEventLog, witnesses: []});
+    } catch(e) {
+      error = e;
+    }
+
+    expect(error).to.exist;
+    expect(error.message).to.include('witnesses');
+  });
+
+  it('should produce a stable previousEventHash before and after witnessing',
+    async () => {
+      const {cryptographicEventLog} = await create();
+      // capture hash before witnessing
+      const hashBefore =
+        getPreviousEventHash({cel: cryptographicEventLog});
+      await witness({cel: cryptographicEventLog, witnesses: TEST_WITNESSES});
+      // witness proofs attach to the log entry wrapper, not the event itself —
+      // the hash must be identical after witnessing
+      const hashAfter =
+        getPreviousEventHash({cel: cryptographicEventLog});
+
+      expect(hashBefore).to.be.a('string').that.matches(/^z/);
+      expect(hashAfter).to.equal(hashBefore);
+    });
+
+  it('should detect a tampered DID identifier in the create event',
+    async () => {
+      const {cryptographicEventLog} = await runCreateAndWitness();
+
+      const tampered = structuredClone(cryptographicEventLog);
+      tampered.log[0].event.operation.data.id = 'did:cel:zTAMPERED';
+
+      const {valid, errors} =
+        await read({cel: tampered, trustedWitnesses: getTrustedWitnesses()});
+
+      expect(valid).to.be.false;
+      expect(errors.some(e => e.includes('identifier mismatch'))).to.be.true;
+    });
+
+  it('should reject an operation proof signed with a key not in heartbeat[]',
+    async () => {
+      const {cryptographicEventLog} = await runCreateAndWitness();
+
+      // replace the verificationMethod with a random did:key that was never
+      // registered in heartbeat[], so the key lookup fails
+      const tampered = structuredClone(cryptographicEventLog);
+      tampered.log[0].event.proof.verificationMethod =
+        'did:key:zDnaerx9CtbPJ1q36T5Ln5wYt3MQYeGRG5ehnPAmxcf5mDZpv' +
+        '#zDnaerx9CtbPJ1q36T5Ln5wYt3MQYeGRG5ehnPAmxcf5mDZpv';
+
+      const {valid, errors} =
+        await read({cel: tampered, trustedWitnesses: getTrustedWitnesses()});
+
+      expect(valid).to.be.false;
+      expect(errors.some(e =>
+        e.includes('operation proof') || e.includes('heartbeat'))).to.be.true;
     });
 });

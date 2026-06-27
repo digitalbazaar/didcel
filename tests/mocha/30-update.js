@@ -80,6 +80,21 @@ describe('update', function() {
     }
   });
 
+  it('should initialize a new array when verificationRelationship is absent',
+    async () => {
+      const {didDocument} = await create();
+
+      // 'capabilityInvocation' is not present on a freshly-created document
+      expect(didDocument.capabilityInvocation).to.be.undefined;
+
+      const {keyPair: newKp, didDocument: updated} = await addVm({
+        didDocument, verificationRelationship: 'capabilityInvocation'
+      });
+
+      expect(updated.capabilityInvocation).to.be.an('array').with.length(1);
+      expect(newKp).to.exist;
+    });
+
   it('should throw MALFORMED_CEL_ERROR when adding an event to an empty log',
     async () => {
       const {heartbeatSecret, didDocument} = await create();
