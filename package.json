@@ -42,6 +42,7 @@
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
+    "@bedrock/test": "^8.2.0",
     "cross-env": "^7.0.3",
     "eslint": "^8.57.1",
     "eslint-config-digitalbazaar": "^5.2.0",
