@@ -13,7 +13,7 @@ export const TEST_WITNESS_DIDS = [];
  * Returns the SHA3-256 multibase hash of the heartbeat did:key at `index`.
  * This is the value stored in the DID document's `heartbeat[]` array.
  *
- * @param {Buffer|Uint8Array} heartbeatSecret - 16-byte HKDF master secret.
+ * @param {Buffer|Uint8Array} heartbeatSecret - 32-byte HKDF master secret.
  * @param {number} index - Key derivation index.
  * @returns {Promise<string>} Base58btc-encoded SHA3-256 multihash
  *   (`z`-prefixed).

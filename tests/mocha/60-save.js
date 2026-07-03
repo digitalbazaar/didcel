@@ -64,7 +64,7 @@ describe('save', function() {
       expect(exportedLoaded.publicKeyMultibase)
         .to.equal(exportedOriginal.publicKeyMultibase);
 
-      expect(loaded.heartbeat).to.be.instanceOf(Buffer).with.length(16);
+      expect(loaded.heartbeat).to.be.instanceOf(Buffer).with.length(32);
       expect(loaded.heartbeat.toString('hex'))
         .to.equal(heartbeatSecret.toString('hex'));
     });

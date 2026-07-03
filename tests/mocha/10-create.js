@@ -32,9 +32,9 @@ describe('create', function() {
     const heartbeatHash = didDocument.heartbeat[0];
     expect(heartbeatHash).to.be.a('string').that.matches(/^z/);
 
-    // heartbeatSecret: 16-byte KDF master secret returned to caller for storage
+    // heartbeatSecret: 32-byte KDF master secret returned to caller for storage
     expect(Buffer.isBuffer(heartbeatSecret)).to.be.true;
-    expect(heartbeatSecret).to.have.length(16);
+    expect(heartbeatSecret).to.have.length(32);
 
     // no service property when none supplied
     expect(didDocument.service).to.be.undefined;
