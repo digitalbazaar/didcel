@@ -55,7 +55,8 @@ describe('create', function() {
     const {didDocument} = await create({service});
 
     expect(didDocument.service).to.be.an('array').with.length(1);
-    expect(didDocument.service[0]).to.have.property('type', 'CelStorageService');
+    expect(didDocument.service[0]).to.have.property(
+      'type', 'CelStorageService');
     expect(didDocument.service[0].serviceEndpoint).to.deep.equal(
       ['https://storage.example/v1']);
   });

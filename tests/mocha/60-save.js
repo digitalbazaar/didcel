@@ -124,9 +124,9 @@ describe('save', function() {
   });
 
   describe('cel.loadFromFile / cel.read', function() {
-    // Build a trustedWitnesses list covering the entire test epoch.
+    // Build a recognizedWitnesses list covering the entire test epoch.
     // TEST_WITNESS_DIDS is populated by mock-witness.js start().
-    function getTrustedWitnesses() {
+    function getRecognizedWitnesses() {
       return TEST_WITNESS_DIDS.map(id => ({
         id,
         validFrom: '2000-01-01T00:00:00Z',
@@ -144,7 +144,7 @@ describe('save', function() {
 
       const {cel, valid, errors, didDocument: loadedDoc} =
         await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
@@ -177,7 +177,7 @@ describe('save', function() {
 
       const {valid, errors, cel} =
         await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid, `errors: ${JSON.stringify(errors)}`).to.be.true;
       expect(errors).to.have.length(0);
@@ -223,7 +223,7 @@ describe('save', function() {
       // didDocument should match the original create-event document
       const {valid, errors, didDocument: resolvedDoc} = await loadFromFile({
         filename: celPath,
-        trustedWitnesses: getTrustedWitnesses(),
+        recognizedWitnesses: getRecognizedWitnesses(),
         versionTime: createWitnessTime
       });
 
@@ -261,7 +261,7 @@ describe('save', function() {
 
       const {valid, errors} =
         await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
@@ -319,7 +319,7 @@ describe('save', function() {
 
         const {valid, errors} =
           await loadFromFile(
-            {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+            {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
         expect(valid).to.be.false;
         expect(errors.some(e => e.includes('heartbeatFrequency'))).to.be.true;
@@ -339,7 +339,7 @@ describe('save', function() {
 
       const {valid, errors} =
         await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors).to.have.length.at.least(1);
@@ -351,7 +351,8 @@ describe('save', function() {
       let error;
       try {
         await loadFromFile(
-          {filename: missingPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: missingPath,
+            recognizedWitnesses: getRecognizedWitnesses()});
       } catch(e) {
         error = e;
       }
@@ -394,7 +395,7 @@ describe('save', function() {
 
       const {valid, errors} =
         await loadFromFile(
-          {filename: celPath, trustedWitnesses: getTrustedWitnesses()});
+          {filename: celPath, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e => e.includes('after deactivation'))).to.be.true;

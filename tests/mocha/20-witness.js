@@ -4,8 +4,8 @@
 import {
   create, getPreviousEventHash, read, witness
 } from '../../lib/index.js';
-import chai from 'chai';
 import {TEST_WITNESS_DIDS, TEST_WITNESSES} from './helpers.js';
+import chai from 'chai';
 
 const {expect} = chai;
 
@@ -15,7 +15,7 @@ async function runCreateAndWitness() {
   return {didDocument, cryptographicEventLog};
 }
 
-function getTrustedWitnesses() {
+function getRecognizedWitnesses() {
   return TEST_WITNESS_DIDS.map(id => ({
     id,
     validFrom: '2000-01-01T00:00:00Z',
@@ -79,7 +79,8 @@ describe('witness', function() {
         '#zDnaerx9CtbPJ1q36T5Ln5wYt3MQYeGRG5ehnPAmxcf5mDZpv';
 
       const {valid, errors} =
-        await read({cel: tampered, trustedWitnesses: getTrustedWitnesses()});
+        await read(
+          {cel: tampered, recognizedWitnesses: getRecognizedWitnesses()});
 
       expect(valid).to.be.false;
       expect(errors.some(e =>
