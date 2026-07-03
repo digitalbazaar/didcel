@@ -50,7 +50,7 @@ describe('create', function() {
   it('should include service endpoints when supplied', async () => {
     const service = [{
       type: 'CelStorageService',
-      serviceEndpoint: ['https://storage.example/v1']
+      serviceEndpoint: ['https://storage.example/dids/']
     }];
     const {didDocument} = await create({service});
 
@@ -58,6 +58,6 @@ describe('create', function() {
     expect(didDocument.service[0]).to.have.property(
       'type', 'CelStorageService');
     expect(didDocument.service[0].serviceEndpoint).to.deep.equal(
-      ['https://storage.example/v1']);
+      ['https://storage.example/dids/']);
   });
 });
