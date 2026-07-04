@@ -4,10 +4,11 @@
 
 /**
  * Minimal mock HTTP server implementing the did:cel blind-witness endpoint.
- * Accepts POST {digestMultibase} and returns {proof: DataIntegrityProof}.
+ * Accepts POST {digestMultibase, options} and returns
+ * {proof: DataIntegrityProof}.
  *
  * VerifyData = SHA256(JCS(proofOptions)) || rawHash, where rawHash is the
- * 32-byte SHA3-256 digest extracted from the received multihash. This matches
+ * 32-byte SHA2-256 digest extracted from the received multihash. This matches
  * exactly what `_verifyWitnessProof()` in cel.js reconstructs.
  */
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
@@ -17,8 +18,8 @@ import canonicalize from 'canonicalize';
 import crypto from 'node:crypto';
 import http from 'node:http';
 
-// SHA3-256 multihash header is 2 bytes: [0x16, 0x20]
-const MULTIHASH_HEADER_LENGTH = 2;
+// SHA2-256 multihash header: function code 0x12, digest size 32 (0x20)
+const SHA2_256_HEADER = new Uint8Array([0x12, 0x20]);
 
 let _server = null;
 let _keyPair = null;
@@ -64,16 +65,35 @@ async function _handleRequest(req, res) {
     for await (const chunk of req) {
       chunks.push(chunk);
     }
-    const {digestMultibase} = JSON.parse(Buffer.concat(chunks).toString());
+    const {
+      digestMultibase,
+      options: {cryptosuite = 'ecdsa-jcs-2019'} = {}
+    } = JSON.parse(Buffer.concat(chunks).toString());
 
-    // strip the 2-byte multihash header to get the raw 32-byte digest
+    if(cryptosuite !== 'ecdsa-jcs-2019') {
+      res.writeHead(400, {'Content-Type': 'application/json'});
+      res.end(JSON.stringify({error: `unsupported cryptosuite ${cryptosuite}`}));
+      return;
+    }
+
+    // validate the sha2-256 multihash header and strip it to get the
+    // raw 32-byte digest
     const mhBytes = base58btc.decode(digestMultibase);
-    const rawHash = mhBytes.slice(MULTIHASH_HEADER_LENGTH);
+    if(mhBytes.length !== SHA2_256_HEADER.length + 32 ||
+      mhBytes[0] !== SHA2_256_HEADER[0] || mhBytes[1] !== SHA2_256_HEADER[1]) {
+      res.writeHead(400, {'Content-Type': 'application/json'});
+      res.end(JSON.stringify({
+        error: 'digestMultibase must be a base58btc-encoded sha2-256 ' +
+          'multihash value'
+      }));
+      return;
+    }
+    const rawHash = mhBytes.slice(SHA2_256_HEADER.length);
 
     const proofOptions = {
       '@context': 'https://w3id.org/security/data-integrity/v2',
       created: new Date().toISOString(),
-      cryptosuite: 'ecdsa-jcs-2019',
+      cryptosuite,
       proofPurpose: 'assertionMethod',
       type: 'DataIntegrityProof',
       verificationMethod: _verificationMethod

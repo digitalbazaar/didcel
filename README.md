@@ -407,7 +407,7 @@ const {valid, errors, didDocument: resolved} = await loadFromFile({
 | `lib/cel.js` | `addEvent`, `getPreviousEventHash`, `witness`, `read`, `loadFromFile`, `saveToFile` |
 | `lib/secrets.js` | `saveSecrets`, `loadSecrets` |
 | `lib/witness.js` | HTTP client for witness services |
-| `lib/utils.js` | `sha3256Multibase`, `prettyPrintCel`, suffix-based document lookup |
+| `lib/utils.js` | `sha3256Multibase`, `sha2256Multibase`, `prettyPrintCel`, suffix-based document lookup |
 | `lib/validate.js` | AJV JSON Schema validation for DID documents and CELs |
 
 ## License
